@@ -152,7 +152,8 @@ async function allProofs() {
 }
 
 // Reduce la foto para que ocupe poco (un documento de Firestore admite hasta 1 MB).
-function compressImage(file) {
+// Con keepAlpha (fotos de premios) un PNG se guarda como PNG, para no perder el fondo transparente.
+function compressImage(file, keepAlpha = false) {
   const attempts = [[1000, 0.7], [800, 0.5], [600, 0.4]];
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -164,7 +165,16 @@ function compressImage(file) {
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(img.width * k);
         canvas.height = Math.round(img.height * k);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const g = canvas.getContext('2d');
+        g.drawImage(img, 0, 0, canvas.width, canvas.height);
+        if (keepAlpha && file.type === 'image/png') {
+          const png = canvas.toDataURL('image/png');
+          if (png.length < 700000) return resolve(png);
+        }
+        // el JPEG no tiene transparencia: se pinta un fondo blanco detrás (si no, saldría negro)
+        g.globalCompositeOperation = 'destination-over';
+        g.fillStyle = '#fff';
+        g.fillRect(0, 0, canvas.width, canvas.height);
         const data = canvas.toDataURL('image/jpeg', quality);
         if (data.length < 700000) return resolve(data);
       }
@@ -1047,7 +1057,7 @@ function renderPrizes() {
       if (!chosen) return;
       if (!chosen.type.startsWith('image/')) return alert('Elegí una foto o una imagen.');
       try {
-        await setDoc(doc(db, 'prizeImages', prize.id), { data: await compressImage(chosen) });
+        await setDoc(doc(db, 'prizeImages', prize.id), { data: await compressImage(chosen, true) });
         saveConfig(); // asegura que el premio (y su id) queden guardados
       } catch (err) {
         showError(err);
