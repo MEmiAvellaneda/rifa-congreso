@@ -303,3 +303,10 @@ input[type=tel] { width: 100%; margin-top: 4px; padding: 9px 10px; border: 1px s
 
 /* Aviso de datos que faltan en la imagen */
 .share-note { margin: 0 0 10px; padding: 9px 12px; background: #fff7ed; border: 1px solid #fdba74; border-radius: 8px; font-size: .88rem; line-height: 1.35; color: #7c2d12; }
+
+/* ---- Control del monto del comprobante ---- */
+.proof-check { margin: 0 0 12px; padding: 9px 12px; border-radius: 8px; font-size: .9rem; line-height: 1.35; border: 1px solid var(--border); background: #f5f5f4; color: #52525b; }
+.proof-check.ok { background: #ecfdf3; border-color: #86efac; color: #166534; }
+.proof-check.warn { background: #fff7ed; border-color: #fdba74; color: #9a3412; }
+
+input.calculado { background: #f5f5f4; font-weight: 700; color: #18181b; cursor: default; }

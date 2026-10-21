@@ -2,7 +2,7 @@
 // Los datos viven en Firebase (Firestore) y se comparten en tiempo real:
 //   config/main      { goal, prizes: [{ id, name, desc, winner }], ad: { title, contact, draw, promo, about } }
 //   students/{id}    { name, phone, numbers: ["0042", ...] }
-//   sales/{número}   { buyer, phone, studentId|null, proofId, ts, price, by }
+//   sales/{número}   { buyer, phone, studentId|null, proofId, ts, price, saleTotal, saleCount, proofCheck, proofSeen, by }
 //   proofs/{id}      { data: "data:image/jpeg;base64,..." }
 //   prizeImages/{id} { data: "data:image/jpeg;base64,..." }   (id = el del premio)
 // `state` es una copia local que se mantiene al día con onSnapshot.
@@ -18,6 +18,10 @@ import { firebaseConfig } from './firebase-config.js';
 
 const TOTAL = 10000;
 const PRICE = 4000; // precio fijo por número
+const PROMO_QTY = 3; // promoción: cada 3 números...
+const PROMO_PRICE = 10000; // ...cuestan $10.000
+// Total a cobrar por n números: los grupos de 3 con la promoción y el resto a precio normal
+const totalFor = (n) => Math.floor(n / PROMO_QTY) * PROMO_PRICE + (n % PROMO_QTY) * PRICE;
 const BLOCK_SIZE = 100;
 const MIN_PER_STUDENT = 15;
 const MAX_ROWS = 300;
@@ -911,7 +915,166 @@ function renderChips() {
   }
 }
 
-$('f-student').addEventListener('input', () => { picked.clear(); $('f-filter').value = ''; renderChips(); });
+/* ---------- Monto de la venta y control del comprobante ---------- */
+
+// Números elegidos en el formulario, sea de un alumno o venta directa
+function selectedNumbers() {
+  const { mode } = chosenSeller();
+  if (mode === 'student') return [...picked].sort();
+  if (mode === 'direct') return parseNumbers($('f-numbers').value).numbers || [];
+  return [];
+}
+
+// El monto se muestra como $10.000 y su valor numérico queda en data-amount
+function setAmount(value) {
+  $('f-amount').dataset.amount = value || '';
+  $('f-amount').value = value ? money(value) : '';
+}
+
+// El monto a cobrar se calcula solo (no se edita): la promoción rige por grupos de 3 números
+function updateTotal() {
+  const n = selectedNumbers().length;
+  const expected = totalFor(n);
+  const groups = Math.floor(n / PROMO_QTY);
+  const detail = groups ? ` (${groups} promo${groups > 1 ? 's' : ''} de ${PROMO_QTY} por ${money(PROMO_PRICE)}${n % PROMO_QTY ? ` + ${n % PROMO_QTY} a ${money(PRICE)}` : ''})` : '';
+  $('f-total').textContent = n
+    ? `${n} número${n > 1 ? 's' : ''}${detail}. Se calcula solo: cada ${PROMO_QTY} números cuestan ${money(PROMO_PRICE)}.`
+    : `Elegí los números: se calcula solo (cada ${PROMO_QTY} números cuestan ${money(PROMO_PRICE)}).`;
+  setAmount(n ? expected : 0);
+  showProofCheck();
+}
+
+// Lector de texto de imágenes (Tesseract.js): se baja recién cuando se adjunta un comprobante
+let ocrLib;
+function loadOcr() {
+  ocrLib ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js';
+    s.onload = () => resolve(window.Tesseract);
+    s.onerror = () => { ocrLib = null; reject(new Error('sin conexión al lector')); };
+    document.head.appendChild(s);
+  });
+  return ocrLib;
+}
+
+// Un solo lector reutilizado (crearlo cada vez tarda y gasta memoria); las lecturas se hacen de a una
+let ocrWorker;
+let ocrQueue = Promise.resolve();
+function recognizeText(canvas) {
+  const run = async () => {
+    try {
+      ocrWorker ||= loadOcr().then((T) => T.createWorker('eng'));
+      const worker = await ocrWorker;
+      return (await worker.recognize(canvas)).data.text || '';
+    } catch (err) {
+      ocrWorker = null;
+      throw err;
+    }
+  };
+  const result = ocrQueue.then(run, run);
+  ocrQueue = result.catch(() => {});
+  return result;
+}
+
+// Busca montos en el texto: "$ 10.000,00", "ARS 10.000", "$4000", "10.000". Se ignoran fechas, teléfonos y números de operación.
+function amountsIn(text) {
+  const found = new Set();
+  const withSeparators = '\\d{1,3}(?:[.\\s]\\d{3})+(?:,\\d{1,2})?'; // 10.000  10.000,00  10 000
+  const plain = '\\d+(?:,\\d{1,2})?'; // 10000  4000,50
+  const re = new RegExp(`(?:\\$|ARS|AR\\$)\\s*(${withSeparators}|${plain})(?!\\d)|(?:^|[^\\d.,])(${withSeparators})(?![\\d.])`, 'gim');
+  for (const m of text.matchAll(re)) {
+    const raw = (m[1] || m[2]).replace(/[.\s]/g, '').replace(',', '.');
+    const value = parseFloat(raw);
+    if (value >= 100 && value <= 10000000) found.add(value);
+  }
+  return [...found];
+}
+
+// ¿El monto esperado aparece en el texto, con o sin puntos ("10.000", "10000", "10 000")?
+function textHasAmount(text, amount) {
+  if (!amount) return false;
+  const digits = String(Math.round(amount));
+  const parts = [];
+  for (let i = digits.length; i > 0; i -= 3) parts.unshift(digits.slice(Math.max(0, i - 3), i));
+  const re = new RegExp(`(?:^|[^\\d])${parts.join('[.,\\s]?')}(?!\\d)`, 'm');
+  return re.test(text);
+}
+
+// El comprobante adjunto: { file, promise, amounts, failed }
+let proofOcr = null;
+
+function imageForOcr(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * k);
+      canvas.height = Math.round(img.height * k);
+      const g = canvas.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('imagen')); };
+    img.src = url;
+  });
+}
+
+function readProof(file) {
+  const current = { file, amounts: null, text: '', failed: false };
+  proofOcr = current;
+  current.promise = (async () => {
+    try {
+      current.text = await recognizeText(await imageForOcr(file));
+      current.amounts = amountsIn(current.text);
+    } catch (err) {
+      current.failed = true;
+    }
+    if (proofOcr === current) showProofCheck();
+  })();
+  showProofCheck();
+}
+
+// Estado del control: 'leyendo' | 'ok' | 'distinto' | 'no_leido' | 'sin_comprobante'
+function proofStatus() {
+  if (!proofOcr) return { status: 'sin_comprobante' };
+  if (!proofOcr.promise || (proofOcr.amounts === null && !proofOcr.failed)) return { status: 'leyendo' };
+  const expected = Number($('f-amount').dataset.amount) || 0;
+  if (proofOcr.failed) return { status: 'no_leido' };
+  if (proofOcr.amounts.some((v) => Math.abs(v - expected) < 0.5) || textHasAmount(proofOcr.text, expected)) {
+    return { status: 'ok', seen: expected };
+  }
+  if (!proofOcr.amounts.length) return { status: 'no_leido' };
+  return { status: 'distinto', seen: proofOcr.amounts };
+}
+
+function showProofCheck() {
+  const box = $('proof-check');
+  const { status, seen } = proofStatus();
+  const expected = Number($('f-amount').dataset.amount) || 0;
+  const texts = {
+    leyendo: ['info', 'Leyendo el comprobante…'],
+    ok: ['ok', `✔ El comprobante muestra ${money(seen)}: coincide con el monto cobrado.`],
+    distinto: ['warn', `⚠ El comprobante parece mostrar ${Array.isArray(seen) ? seen.slice(0, 3).map(money).join(' / ') : ''} y el monto cobrado es ${money(expected)}. Revisalo.`],
+    no_leido: ['warn', 'No pude leer el monto del comprobante. Revisalo vos antes de guardar.'],
+  };
+  if (!texts[status]) { box.hidden = true; return; }
+  box.hidden = false;
+  box.className = 'proof-check ' + texts[status][0];
+  box.textContent = texts[status][1];
+}
+
+$('f-numbers').addEventListener('input', () => updateTotal());
+$('f-proof').addEventListener('change', () => {
+  const file = $('f-proof').files[0];
+  if (file && file.type.startsWith('image/')) readProof(file); else { proofOcr = null; showProofCheck(); }
+});
+
+$('f-student').addEventListener('input', () => { picked.clear(); $('f-filter').value = ''; renderChips(); updateTotal(); });
 $('f-filter').addEventListener('input', () => {
   $('f-filter').value = $('f-filter').value.replace(/\D/g, '');
   renderChips();
@@ -922,6 +1085,7 @@ $('f-chips').addEventListener('click', (e) => {
   const n = chip.dataset.num;
   if (picked.has(n)) picked.delete(n); else picked.add(n);
   renderChips();
+  updateTotal();
 });
 
 $('sale-form').addEventListener('submit', async (e) => {
@@ -955,8 +1119,22 @@ $('sale-form').addEventListener('submit', async (e) => {
   if (!file) return setMsg(msg, 'Adjuntá el comprobante de pago: sin comprobante no se registra la venta.', 'error');
   if (!file.type.startsWith('image/')) return setMsg(msg, 'El comprobante tiene que ser una foto o captura de pantalla.', 'error');
 
+  // Monto de la venta: lo fija la promoción (grupos de 3) y se reparte entre los números
+  const amount = totalFor(numbers.length);
+  setAmount(amount);
+
+  // Control del monto contra el comprobante (espera a que termine de leerlo)
   const submit = e.submitter;
   submit.disabled = true;
+  setMsg(msg, 'Revisando el comprobante…');
+  if (proofOcr && proofOcr.file === file && proofOcr.promise) await proofOcr.promise;
+  const check = proofStatus();
+  if (check.status === 'distinto' && !confirm(`El comprobante parece mostrar ${check.seen.slice(0, 3).map(money).join(' / ')} y el monto cobrado es ${money(amount)}. ¿Guardar igual?`)) {
+    submit.disabled = false;
+    return setMsg(msg, 'No se guardó: revisá el monto o el comprobante.', 'error');
+  }
+  const proofCheck = check.status === 'ok' || check.status === 'distinto' ? check.status : 'no_leido';
+
   setMsg(msg, 'Guardando…');
   const proofId = 'c' + Date.now();
   try {
@@ -968,13 +1146,19 @@ $('sale-form').addEventListener('submit', async (e) => {
       const snaps = await Promise.all(refs.map((r) => tx.get(r)));
       const already = numbers.filter((n, i) => snaps[i].exists());
       if (already.length) throw new Error(`Ya vendidos: ${already.join(', ')}.`);
-      refs.forEach((ref) => tx.set(ref, {
+      const base = Math.floor(amount / numbers.length);
+      const extra = amount - base * numbers.length; // los pesos que sobran van de a uno a los primeros números
+      refs.forEach((ref, i) => tx.set(ref, {
         buyer,
         phone: $('f-phone').value.trim(),
         studentId: id,
         proofId,
         ts: now,
-        price: PRICE,
+        price: base + (i < extra ? 1 : 0),
+        saleTotal: amount,
+        saleCount: numbers.length,
+        proofCheck,
+        proofSeen: proofOcr && Array.isArray(proofOcr.amounts) ? proofOcr.amounts.slice(0, 5) : [],
         by: auth.currentUser.email,
       }));
     });
@@ -990,7 +1174,9 @@ $('sale-form').addEventListener('submit', async (e) => {
   $('f-phone').value = '';
   $('f-proof').value = '';
   $('f-filter').value = '';
-  setMsg(msg, `Venta guardada: ${numbers.join(', ')}`, 'ok');
+  proofOcr = null;
+  updateTotal();
+  setMsg(msg, `Venta guardada: ${numbers.join(', ')} (${money(amount)})`, 'ok');
 });
 
 /* ---------- Configuración (meta y premios) ---------- */
@@ -1158,6 +1344,15 @@ $('q-number').addEventListener('input', () => {
 
 /* ---------- Lista de ventas ---------- */
 
+// Texto y color del control del monto de una venta
+function checkLabel(s) {
+  if (!s.proofId) return { kind: 'pending', text: 'Sin comprobante' };
+  if (s.proofCheck === 'ok') return { kind: 'paid', text: 'Monto verificado' };
+  if (s.proofCheck === 'distinto') return { kind: 'pending', text: 'Revisar monto' };
+  if (s.proofCheck === 'no_leido') return { kind: 'pending', text: 'Monto sin verificar' };
+  return { kind: 'paid', text: 'Con comprobante' };
+}
+
 function renderTable() {
   const text = $('filter').value.trim().toLowerCase();
   const rows = Object.keys(state.sales).sort().filter((num) => {
@@ -1178,7 +1373,8 @@ function renderTable() {
     });
     const tdState = el('td');
     tdState.dataset.label = 'Comprobante';
-    tdState.append(el('span', { className: 'badge ' + (s.proofId ? 'paid' : 'pending') }, s.proofId ? 'Con comprobante' : 'Sin comprobante'));
+    const control = checkLabel(s);
+    tdState.append(el('span', { className: 'badge ' + control.kind }, control.text));
     const tdAct = el('td');
     const view = el('button', { type: 'button' }, 'Ver');
     view.dataset.num = num;
@@ -1213,8 +1409,10 @@ function openDetail(num) {
     ['Contacto', s.phone || '—'],
     ['Vendedor/a', studentName(s.studentId)],
     ['Fecha de venta', fmtDate(s.ts)],
-    ['Precio', money(priceOf(s))],
+    ['Monto de este número', money(priceOf(s))],
     ['Registrada por', s.by || '—'],
+    ['Venta', s.saleCount ? `${money(s.saleTotal)} por ${s.saleCount} número${s.saleCount > 1 ? 's' : ''}` : money(priceOf(s))],
+    ['Control del monto', checkLabel(s).text + (s.proofCheck === 'distinto' && s.proofSeen && s.proofSeen.length ? ` (el comprobante muestra ${s.proofSeen.slice(0, 3).map(money).join(' / ')})` : '')],
     ['Comprobante', s.proofId ? 'Adjunto' : 'Sin comprobante'],
   ];
   for (const [label, value] of rows) info.append(el('dt', {}, label), el('dd', {}, value));
