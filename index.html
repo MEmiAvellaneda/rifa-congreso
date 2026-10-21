@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rifa solidaria - Viaje Académico 2027</title>
+  <title>Bono Contribución - Viaje Académico 2027</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="hero">
     <img src="logo.png" class="logo" alt="40 años - Ingeniería en Sistemas de Información - UTN FRT" onerror="this.hidden = true">
     <div>
-      <h1>Rifa solidaria</h1>
+      <h1>Bono Contribución</h1>
       <p>A beneficio del <strong>Viaje Académico y de Inmersión Tecnológica 2027: Tech Show London e IBM Quantum Spain</strong>. Números del 0000 al 9999.</p>
       <p id="userbar" class="userbar" hidden><span id="user-email"></span> · <button type="button" id="btn-logout">Salir</button></p>
     </div>
@@ -55,6 +55,9 @@
       <form id="student-form" class="row-form" autocomplete="off">
         <label>Nombre del alumno/a
           <input type="text" id="s-name" required>
+        </label>
+        <label>Teléfono del alumno/a
+          <input type="tel" id="s-phone" inputmode="tel" maxlength="30" placeholder="Ej: 381 555 1234" required>
         </label>
         <label>Cantidad de números (mín. 15)
           <input type="number" id="s-count" min="15" max="1000" value="15" required>
@@ -107,6 +110,31 @@
         <p id="form-msg" class="msg" role="status"></p>
         <button type="submit" class="primary">Guardar venta</button>
       </form>
+    </section>
+
+    <!-- Datos de la imagen de publicidad -->
+    <section class="card" aria-labelledby="t-publicidad">
+      <h2 id="t-publicidad">Datos para la publicidad</h2>
+      <p class="hint">Estos textos salen en la imagen para compartir. Los que dejes vacíos no se muestran.</p>
+      <div class="row-form">
+        <label>Título
+          <input type="text" id="ad-title" maxlength="40">
+        </label>
+        <label>Teléfono general (se usa si el alumno no cargó el suyo)
+          <input type="text" id="ad-contact" maxlength="60" placeholder="Ej: 381 555 1234">
+        </label>
+      </div>
+      <div class="row-form">
+        <label>Sorteo
+          <input type="text" id="ad-draw" maxlength="90" placeholder="Ej: Se sortea el 29/11 - Lotería vespertina de Tucumán (4 cifras)">
+        </label>
+        <label>Promoción (opcional)
+          <input type="text" id="ad-promo" maxlength="60" placeholder="Ej: Promo 3 números $10.000">
+        </label>
+      </div>
+      <label>Texto de presentación
+        <textarea id="ad-about" rows="3" maxlength="400"></textarea>
+      </label>
     </section>
 
     <!-- Premios -->
@@ -191,7 +219,7 @@
   <!-- Pantalla de ingreso -->
   <div id="gate" class="gate">
     <div class="gate-box">
-      <h2>Rifa solidaria</h2>
+      <h2>Bono Contribución</h2>
       <p id="gate-msg"></p>
       <button type="button" id="btn-login" class="primary">Ingresar con Google</button>
       <button type="button" id="btn-gate-logout" hidden>Salir</button>

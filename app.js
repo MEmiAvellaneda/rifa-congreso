@@ -1,7 +1,7 @@
-// Rifa: números del 0000 al 9999, repartidos al azar entre alumnos.
+// Bono Contribución: números del 0000 al 9999, repartidos al azar entre alumnos.
 // Los datos viven en Firebase (Firestore) y se comparten en tiempo real:
-//   config/main      { goal, prizes: [{ id, name, winner }] }
-//   students/{id}    { name, numbers: ["0042", ...] }
+//   config/main      { goal, prizes: [{ id, name, desc, winner }], ad: { title, contact, draw, promo, about } }
+//   students/{id}    { name, phone, numbers: ["0042", ...] }
 //   sales/{número}   { buyer, phone, studentId|null, proofId, ts, price, by }
 //   proofs/{id}      { data: "data:image/jpeg;base64,..." }
 //   prizeImages/{id} { data: "data:image/jpeg;base64,..." }   (id = el del premio)
@@ -34,7 +34,16 @@ const defaultPrizes = () => [
   { id: 'p' + Date.now(), name: 'Notebook', winner: '' },
   { id: 'p' + (Date.now() + 1), name: 'Auriculares', winner: '' },
 ];
-const state = { goal: 0, prizes: defaultPrizes(), students: {}, sales: {}, prizeImages: {} };
+// Textos de la imagen de publicidad (se editan desde la página)
+const defaultAd = () => ({
+  title: 'BONO CONTRIBUCIÓN',
+  contact: '',
+  draw: 'Sorteo por la Quiniela',
+  promo: '',
+  about: 'Somos estudiantes de Ingeniería en Sistemas y organizamos este Bono Contribución para recaudar fondos y participar del Viaje Académico y de Inmersión Tecnológica 2027. ¡Tu colaboración nos acerca a nuestro sueño!',
+});
+
+const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, prizeImages: {} };
 let currentBlock = 0;
 const picked = new Set(); // números tocados en el formulario de venta
 
@@ -188,7 +197,9 @@ $('student-form').addEventListener('submit', async (e) => {
   const msg = $('student-msg');
   const name = $('s-name').value.trim();
   const count = Number($('s-count').value);
+  const phone = $('s-phone').value.trim();
   if (!name) return setMsg(msg, 'Falta el nombre.', 'error');
+  if (phone.replace(/\D/g, '').length < 8) return setMsg(msg, 'Cargá el teléfono del alumno (al menos 8 números).', 'error');
   if (!Number.isInteger(count) || count < MIN_PER_STUDENT) {
     return setMsg(msg, `Cada alumno debe tener al menos ${MIN_PER_STUDENT} números.`, 'error');
   }
@@ -199,13 +210,14 @@ $('student-form').addEventListener('submit', async (e) => {
   const result = pickRandom(count);
   if (result.error) return setMsg(msg, result.error, 'error');
   try {
-    await setDoc(doc(db, 'students', 's' + Date.now()), { name, numbers: result.numbers });
+    await setDoc(doc(db, 'students', 's' + Date.now()), { name, phone, numbers: result.numbers });
   } catch (err) {
     return showError(err);
   }
   $('s-name').value = '';
+  $('s-phone').value = '';
   setMsg(msg, `${name}: ${count} números asignados.`, 'ok');
-  openShare(name, result.numbers);
+  openShare(name, result.numbers, phone);
 });
 
 /* ---------- Render: resumen ---------- */
@@ -329,6 +341,8 @@ const cardMsg = {}; // id del alumno -> { text, kind }
 
 function renderStudents() {
   const box = $('students-grid');
+  // si alguien está escribiendo un teléfono, no se redibuja para no pisarle lo que tipea
+  if (isEditing(box) && document.activeElement.tagName === 'INPUT') return;
   box.textContent = '';
   const ids = sortedStudentIds();
   if (!ids.length) return void (box.textContent = 'Todavía no hay alumnos.');
@@ -346,6 +360,13 @@ function renderStudents() {
     fill.style.width = (st.assigned ? st.sold / st.assigned * 100 : 0) + '%';
     bar.append(fill);
     card.append(bar);
+
+    const phoneBox = el('label', { className: 'student-phone' }, 'Teléfono para reservar');
+    const phoneInput = el('input', { type: 'tel', value: s.phone || '', placeholder: 'Falta cargar el teléfono' });
+    phoneInput.dataset.phoneFor = id;
+    if (!s.phone) phoneInput.classList.add('missing');
+    phoneBox.append(phoneInput);
+    card.append(phoneBox);
 
     const chips = el('div', { className: 'chips' });
     for (const n of s.numbers) {
@@ -374,6 +395,26 @@ function renderStudents() {
   }
 }
 
+// El teléfono se guarda al terminar de escribir (al salir del campo o con Enter)
+$('students-grid').addEventListener('change', async (e) => {
+  const input = e.target.closest('input[data-phone-for]');
+  if (!input) return;
+  const id = input.dataset.phoneFor;
+  const phone = input.value.trim();
+  input.blur();
+  if (phone && phone.replace(/\D/g, '').length < 8) {
+    cardMsg[id] = { text: 'Ese teléfono parece incompleto (al menos 8 números).', kind: 'error' };
+    return renderStudents();
+  }
+  try {
+    await setDoc(doc(db, 'students', id), { phone }, { merge: true });
+    cardMsg[id] = { text: phone ? 'Teléfono guardado.' : 'Teléfono borrado.', kind: 'ok' };
+  } catch (err) {
+    showError(err);
+  }
+  renderStudents();
+});
+
 $('students-grid').addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
@@ -397,9 +438,9 @@ $('students-grid').addEventListener('click', async (e) => {
     } catch (err) {
       return showError(err);
     }
-    openShare(s.name, all); // la imagen se rehace con los números nuevos incluidos
+    openShare(s.name, all, s.phone); // la imagen se rehace con los números nuevos incluidos
   } else if (btn.dataset.act === 'image') {
-    openShare(s.name, s.numbers);
+    openShare(s.name, s.numbers, s.phone);
   } else if (btn.dataset.act === 'copy') {
     const free = s.numbers.filter((n) => !state.sales[n]);
     const text = `${s.name} - números para vender: ${free.join(', ')}`;
@@ -455,9 +496,9 @@ function loadLogo() {
   return logoPromise;
 }
 
-// Prepara las fotos de los premios que tienen imagen cargada
+// Prepara las fotos de los premios que tienen imagen cargada: { idDelPremio: imagen }
 async function loadPrizePics() {
-  const pics = [];
+  const pics = {};
   for (const prize of state.prizes) {
     const data = state.prizeImages[prize.id];
     if (!data) continue;
@@ -467,7 +508,7 @@ async function loadPrizePics() {
       i.onerror = () => resolve(null);
       i.src = data;
     });
-    if (img) pics.push({ name: prize.name.trim() || 'Premio', img });
+    if (img) pics[prize.id] = img;
   }
   return pics;
 }
@@ -475,135 +516,213 @@ async function loadPrizePics() {
 const INK = '#18181b';
 const ACCENT = '#ea580c';
 
-function drawShareImage(name, numbers, logo, prizePics = []) {
-  const W = 1080, COLS = 5, CELL_W = 176, CELL_H = 84, GAP = 16;
-  const padX = (W - (COLS * CELL_W + (COLS - 1) * GAP)) / 2;
+// Parte un texto en renglones que entren en el ancho dado
+function wrapLines(ctx, text, maxWidth, size, weight = 'normal') {
+  ctx.font = `${weight} ${size}px ${FONT}`;
+  const lines = [];
+  for (const paragraph of String(text).split('\n')) {
+    let line = '';
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      const test = line ? line + ' ' + word : word;
+      if (line && ctx.measureText(test).width > maxWidth) { lines.push(line); line = word; } else line = test;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
 
-  // Medidas verticales: el logo (si hay) ocupa arriba; después título y una franja oscura con los premios
-  const LOGO_MAX_H = 200, LOGO_MAX_W = 620;
-  const logoH = logo ? Math.min(LOGO_MAX_H, LOGO_MAX_W * logo.height / logo.width) : 0;
-  const logoW = logo ? logoH * logo.width / logo.height : 0;
-  const top = logo ? 36 + logoH + 30 : 40;
-  const titleY = top + 96;
-  const subtitleY = titleY + 62;
-  const bandTop = subtitleY + 44 + 108; // el subtítulo ocupa tres renglones
-  const BAND_H = 160;
-  const HEADER_H = bandTop + BAND_H;
-  // Fotos de los premios (si hay): hasta 3 por fila, cada una en su recuadro con el nombre debajo
-  const PIC_COLS = Math.min(3, Math.max(prizePics.length, 1));
-  const PIC_GAP = 24, PIC_H = 250, PIC_CAPTION = 56;
-  const picW = (W - 2 * padX - (PIC_COLS - 1) * PIC_GAP) / PIC_COLS;
-  const picRows = Math.ceil(prizePics.length / PIC_COLS);
-  const picsH = prizePics.length ? 30 + picRows * (PIC_H + PIC_CAPTION + PIC_GAP) : 0;
-  const contentTop = HEADER_H + picsH;
-  const TITLE_H = 190, FOOTER_H = 190;
-  const rows = Math.ceil(numbers.length / COLS);
-  const gridTop = contentTop + TITLE_H;
-  const H = Math.max(1080, gridTop + rows * (CELL_H + GAP) + FOOTER_H);
+function card(ctx, x, y, w, h, radius, fill, stroke) {
+  roundRectPath(ctx, x, y, w, h, radius);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) { ctx.lineWidth = 3; ctx.strokeStyle = stroke; ctx.stroke(); }
+}
 
+// Dibuja la imagen de publicidad: cabecera con logo, premios con foto, precio, números del alumno y contacto.
+function drawShareImage(name, numbers, logo, pics = {}, phone = '') {
+  const W = 1080, M = 68, CW = W - 2 * M, CX = W / 2;
+  const COLS = 5, CELL_W = 176, CELL_H = 84, GAP = 16;
+  const ad = state.ad;
+  const prizes = state.prizes.filter((p) => p.name.trim());
+
+  // render dibuja todo y devuelve el alto que necesitó; se usa una vez para medir y otra para el lienzo final
+  const render = (ctx, H) => {
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#f5f4f2';
+    ctx.fillRect(0, 0, W, H);
+
+    /* Cabecera */
+    const logoH = logo ? Math.min(190, 620 * logo.height / logo.width) : 0;
+    const logoW = logo ? logoH * logo.width / logo.height : 0;
+    const top = logo ? 36 + logoH + 26 : 44;
+    const titleY = top + 92, line1Y = titleY + 66, line2Y = line1Y + 54, line3Y = line2Y + 54;
+    const headerBottom = line3Y + 42;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, headerBottom);
+    ctx.fillStyle = ACCENT;
+    ctx.fillRect(0, 0, W, 14);
+    ctx.fillRect(0, headerBottom, W, 6);
+    if (logo) ctx.drawImage(logo, (W - logoW) / 2, 36, logoW, logoH);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = INK;
+    fitText(ctx, (ad.title.trim() || 'BONO CONTRIBUCIÓN').toUpperCase(), CX, titleY, W - 120, 100);
+    ctx.fillStyle = '#6b7280';
+    fitText(ctx, 'A beneficio del', CX, line1Y, W - 100, 34, 'normal');
+    ctx.fillStyle = INK;
+    fitText(ctx, 'Viaje Académico y de Inmersión Tecnológica 2027', CX, line2Y, W - 80, 44);
+    fitText(ctx, 'Tech Show London e IBM Quantum Spain', CX, line3Y, W - 80, 44);
+    let y = headerBottom + 6 + 54;
+
+    /* Premios: una tarjeta por premio, con su descripción y su foto */
+    if (prizes.length) {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = ACCENT;
+      ctx.font = `bold 34px ${FONT}`;
+      ctx.fillText(prizes.length > 1 ? 'PREMIOS' : 'PREMIO', M, y + 28);
+      y += 56;
+      prizes.forEach((prize, i) => {
+        const img = pics[prize.id];
+        const PHOTO = 190;
+        const textX = M + 118;
+        const textW = CW - 118 - 28 - (img ? PHOTO + 28 : 0);
+        const descLines = prize.desc && prize.desc.trim() ? wrapLines(ctx, prize.desc.trim(), textW, 30) : [];
+        const h = Math.max(img ? PHOTO + 40 : 124, 36 + 56 + descLines.length * 40 + 24);
+        card(ctx, M, y, CW, h, 24, '#fff', '#e4e2dd');
+
+        ctx.beginPath();
+        ctx.arc(M + 58, y + h / 2, 32, 0, Math.PI * 2);
+        ctx.fillStyle = INK;
+        ctx.fill();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold 36px ${FONT}`;
+        ctx.fillText(String(i + 1), M + 58, y + h / 2 + 13);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = INK;
+        const nameY = descLines.length ? y + 36 + 40 : y + h / 2 + 15;
+        fitText(ctx, prize.name.trim(), textX, nameY, textW, 46);
+        ctx.fillStyle = '#4b5563';
+        ctx.font = `normal 30px ${FONT}`;
+        descLines.forEach((line, k) => ctx.fillText(line, textX, nameY + 44 + k * 40));
+
+        if (img) {
+          const px = M + CW - 28 - PHOTO, py = y + (h - PHOTO) / 2;
+          card(ctx, px, py, PHOTO, PHOTO, 18, '#f5f4f2', null);
+          const k = Math.min((PHOTO - 20) / img.width, (PHOTO - 20) / img.height); // entra entera, sin deformarse
+          ctx.drawImage(img, px + (PHOTO - img.width * k) / 2, py + (PHOTO - img.height * k) / 2, img.width * k, img.height * k);
+        }
+        y += h + 18;
+      });
+      y += 18;
+    }
+
+    /* Precio, promoción y sorteo */
+    const promo = ad.promo.trim();
+    const draw = ad.draw.trim();
+    const labelY = y + 62, priceY = labelY + 90;
+    const promoY = priceY + 62;
+    const drawY = (promo ? promoY : priceY) + 58;
+    const bandH = (draw ? drawY : (promo ? promoY : priceY)) - y + 40;
+    card(ctx, M, y, CW, bandH, 24, INK, null);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fdba74';
+    fitText(ctx, 'PRECIO POR NÚMERO', CX, labelY, CW - 60, 30);
+    ctx.fillStyle = '#fff';
+    fitText(ctx, money(PRICE), CX, priceY, CW - 60, 92);
+    if (promo) {
+      ctx.fillStyle = '#fb923c';
+      fitText(ctx, promo, CX, promoY, CW - 60, 40);
+    }
+    if (draw) {
+      ctx.fillStyle = '#d6d3d1';
+      fitText(ctx, draw, CX, drawY, CW - 60, 34, 'normal');
+    }
+    y += bandH + 56;
+
+    /* Números del alumno */
+    ctx.fillStyle = '#6b7280';
+    fitText(ctx, 'Números de', CX, y + 30, W - 120, 36, 'normal');
+    ctx.fillStyle = INK;
+    fitText(ctx, name, CX, y + 100, W - 120, 68);
+    const gridTop = y + 140;
+    const padX = (W - (COLS * CELL_W + (COLS - 1) * GAP)) / 2;
+    numbers.forEach((n, i) => {
+      const x = padX + (i % COLS) * (CELL_W + GAP);
+      const cy = gridTop + Math.floor(i / COLS) * (CELL_H + GAP);
+      const sold = Boolean(state.sales[n]);
+      card(ctx, x, cy, CELL_W, CELL_H, 16, sold ? '#e7e5e4' : '#fff', null);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = sold ? '#d6d3d1' : INK;
+      ctx.stroke();
+      ctx.fillStyle = sold ? '#a8a29e' : INK;
+      ctx.font = `bold 46px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(n, x + CELL_W / 2, cy + CELL_H / 2 + 16);
+      if (sold) {
+        ctx.strokeStyle = '#a8a29e';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x + 22, cy + CELL_H / 2 + 2);
+        ctx.lineTo(x + CELL_W - 22, cy + CELL_H / 2 + 2);
+        ctx.stroke();
+      }
+    });
+    y = gridTop + Math.ceil(numbers.length / COLS) * (CELL_H + GAP) + 24;
+
+    y += 24;
+
+    /* Contacto para reservar: el teléfono del alumno (o el general, si el alumno no cargó el suyo) */
+    ctx.textAlign = 'center';
+    const contact = (phone || '').trim() || ad.contact.trim();
+    if (contact) {
+      ctx.fillStyle = '#6b7280';
+      fitText(ctx, `RESERVÁ TU NÚMERO CON ${name.toUpperCase()}`, CX, y + 26, CW, 32);
+      card(ctx, M, y + 48, CW, 130, 20, '#e7e5e4', null);
+      ctx.fillStyle = INK;
+      fitText(ctx, contact, CX, y + 48 + 86, CW - 60, 72);
+      y += 48 + 130 + 48;
+    } else {
+      ctx.fillStyle = '#6b7280';
+      fitText(ctx, `Pedile tu número a ${name}`, CX, y + 26, W - 120, 38, 'normal');
+      y += 84;
+    }
+
+    /* Texto de presentación */
+    const about = ad.about.trim();
+    if (about) {
+      const lines = wrapLines(ctx, about, CW - 64, 30);
+      const h = 40 + lines.length * 42 + 22;
+      card(ctx, M, y, CW, h, 24, '#fff', '#e4e2dd');
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#374151';
+      ctx.font = `normal 30px ${FONT}`;
+      lines.forEach((line, k) => ctx.fillText(line, M + 32, y + 56 + k * 42));
+      y += h;
+    }
+    return y + 48;
+  };
+
+  const probe = document.createElement('canvas');
+  probe.width = W;
+  probe.height = 7000;
+  const H = Math.max(1080, Math.ceil(render(probe.getContext('2d'), 7000)));
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-
-  ctx.fillStyle = '#f5f4f2';
-  ctx.fillRect(0, 0, W, H);
-
-  // Cabecera blanca con el logo y el título
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, W, bandTop);
-  ctx.fillStyle = ACCENT;
-  ctx.fillRect(0, 0, W, 14);
-  if (logo) ctx.drawImage(logo, (W - logoW) / 2, 36, logoW, logoH);
-  ctx.fillStyle = INK;
-  fitText(ctx, 'RIFA SOLIDARIA', W / 2, titleY, W - 120, 96);
-  ctx.fillStyle = '#6b7280';
-  fitText(ctx, 'A beneficio del', W / 2, subtitleY, W - 100, 34, 'normal');
-  ctx.fillStyle = INK;
-  fitText(ctx, 'Viaje Académico y de Inmersión Tecnológica 2027', W / 2, subtitleY + 54, W - 80, 44);
-  fitText(ctx, 'Tech Show London e IBM Quantum Spain', W / 2, subtitleY + 108, W - 80, 44);
-
-  // Franja oscura con premios y precio
-  ctx.fillStyle = INK;
-  ctx.fillRect(0, bandTop, W, BAND_H);
-  ctx.fillStyle = ACCENT;
-  ctx.fillRect(0, bandTop, W, 8);
-  ctx.fillStyle = '#fff';
-  const prizes = state.prizes.map((p) => p.name.trim()).filter(Boolean);
-  if (prizes.length) {
-    fitText(ctx, `${prizes.length > 1 ? 'Premios' : 'Premio'}: ${prizes.join(' · ')}`, W / 2, bandTop + 78, W - 120, 56);
-  }
-  const info = [];
-  info.push(`Cada número: ${money(PRICE)}`);
-  info.push('Sorteo por la Quiniela');
-  ctx.fillStyle = '#fdba74';
-  fitText(ctx, info.join('  ·  '), W / 2, bandTop + 130, W - 120, 38, 'normal');
-
-  prizePics.forEach(({ name: prizeName, img }, i) => {
-    const col = i % PIC_COLS;
-    const row = Math.floor(i / PIC_COLS);
-    const inRow = Math.min(PIC_COLS, prizePics.length - row * PIC_COLS); // la última fila queda centrada
-    const x = (W - (inRow * picW + (inRow - 1) * PIC_GAP)) / 2 + col * (picW + PIC_GAP);
-    const y = HEADER_H + 30 + row * (PIC_H + PIC_CAPTION + PIC_GAP);
-    roundRectPath(ctx, x, y, picW, PIC_H, 20);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#e4e2dd';
-    ctx.stroke();
-    const k = Math.min((picW - 24) / img.width, (PIC_H - 24) / img.height); // entra entera, sin deformarse
-    ctx.drawImage(img, x + (picW - img.width * k) / 2, y + (PIC_H - img.height * k) / 2, img.width * k, img.height * k);
-    ctx.fillStyle = INK;
-    fitText(ctx, prizeName, x + picW / 2, y + PIC_H + 40, picW - 16, 32);
-  });
-
-  ctx.fillStyle = '#6b7280';
-  fitText(ctx, 'Números de', W / 2, contentTop + 70, W - 120, 36, 'normal');
-  ctx.fillStyle = INK;
-  fitText(ctx, name, W / 2, contentTop + 140, W - 120, 68);
-
-  numbers.forEach((n, i) => {
-    const x = padX + (i % COLS) * (CELL_W + GAP);
-    const y = gridTop + Math.floor(i / COLS) * (CELL_H + GAP);
-    const sold = Boolean(state.sales[n]);
-    roundRectPath(ctx, x, y, CELL_W, CELL_H, 16);
-    ctx.fillStyle = sold ? '#e7e5e4' : '#fff';
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = sold ? '#d6d3d1' : INK;
-    ctx.stroke();
-    ctx.fillStyle = sold ? '#a8a29e' : INK;
-    ctx.font = `bold 46px ${FONT}`;
-    ctx.fillText(n, x + CELL_W / 2, y + CELL_H / 2 + 16);
-    if (sold) {
-      ctx.strokeStyle = '#a8a29e';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(x + 22, y + CELL_H / 2 + 2);
-      ctx.lineTo(x + CELL_W - 22, y + CELL_H / 2 + 2);
-      ctx.stroke();
-    }
-  });
-
-  const available = numbers.filter((n) => !state.sales[n]).length;
-  ctx.fillStyle = ACCENT;
-  fitText(ctx, `Disponibles: ${available} de ${numbers.length}`, W / 2, H - 105, W - 120, 48);
-  ctx.fillStyle = '#6b7280';
-  fitText(ctx, `Pedile tu número a ${name}`, W / 2, H - 45, W - 120, 36, 'normal');
+  render(canvas.getContext('2d'), H);
   return canvas;
 }
 
 let shareFile = null;
 let shareUrl = null;
 
-async function openShare(name, numbers) {
+async function openShare(name, numbers, phone = '') {
   try {
-    const canvas = drawShareImage(name, numbers, await loadLogo(), await loadPrizePics());
+    const canvas = drawShareImage(name, numbers, await loadLogo(), await loadPrizePics(), phone);
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     const slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    shareFile = new File([blob], `rifa-${slug || 'alumno'}.png`, { type: 'image/png' });
+    shareFile = new File([blob], `bono-${slug || 'alumno'}.png`, { type: 'image/png' });
     if (shareUrl) URL.revokeObjectURL(shareUrl);
     shareUrl = URL.createObjectURL(blob);
     $('share-img').src = shareUrl;
@@ -617,7 +736,7 @@ async function openShare(name, numbers) {
 
 $('share-send').addEventListener('click', async () => {
   try {
-    await navigator.share({ files: [shareFile], title: 'Rifa solidaria' });
+    await navigator.share({ files: [shareFile], title: 'Bono Contribución' });
   } catch (err) {
     if (err.name !== 'AbortError') showError(err); // cancelar el menú de compartir no es un error
   }
@@ -631,15 +750,15 @@ $('share-download').addEventListener('click', () => {
 $('share-close').addEventListener('click', () => $('share').close());
 
 $('btn-assign-csv').addEventListener('click', () => {
-  const lines = ['Alumno,Numero,Estado'];
+  const lines = ['Alumno,Telefono,Numero,Estado'];
   for (const s of Object.values(state.students)) {
     for (const n of s.numbers) {
       const sale = state.sales[n];
-      lines.push([s.name, n, sale ? 'Vendido' : 'Sin vender']
+      lines.push([s.name, s.phone || '', n, sale ? 'Vendido' : 'Sin vender']
         .map((v) => `"${v.replace(/"/g, '""')}"`).join(','));
     }
   }
-  download('rifa-asignaciones.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  download('bono-asignaciones.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 });
 
 /* ---------- Registrar venta ---------- */
@@ -775,19 +894,29 @@ let configTimer;
 function saveConfig() {
   clearTimeout(configTimer);
   configTimer = setTimeout(() => {
-    setDoc(doc(db, 'config', 'main'), { goal: state.goal, prizes: state.prizes }).catch(showError);
+    setDoc(doc(db, 'config', 'main'), { goal: state.goal, prizes: state.prizes, ad: state.ad }).catch(showError);
   }, 500);
 }
 
 const isEditing = (node) => node.contains(document.activeElement);
 
+// Campos de "Datos para la publicidad": clave en state.ad -> id del campo
+const AD_FIELDS = { title: 'ad-title', contact: 'ad-contact', draw: 'ad-draw', promo: 'ad-promo', about: 'ad-about' };
+
 function applyConfig(data) {
   state.goal = (data && data.goal) || 0;
   state.prizes = data && Array.isArray(data.prizes) ? data.prizes : defaultPrizes();
+  state.ad = { ...defaultAd(), ...((data && data.ad) || {}) };
   if (document.activeElement !== $('goal')) $('goal').value = state.goal;
+  for (const [key, id] of Object.entries(AD_FIELDS)) {
+    if (document.activeElement !== $(id)) $(id).value = state.ad[key];
+  }
   if (!isEditing($('prizes'))) renderPrizes();
 }
 
+for (const [key, id] of Object.entries(AD_FIELDS)) {
+  $(id).addEventListener('input', () => { state.ad[key] = $(id).value; saveConfig(); });
+}
 $('goal').addEventListener('change', () => {
   state.goal = Math.max(0, Number($('goal').value) || 0);
   saveConfig();
@@ -799,8 +928,8 @@ function renderPrizes() {
   box.textContent = '';
   state.prizes.forEach((prize, i) => {
     const row = el('div', { className: 'prize-row' });
-    const name = el('input', { type: 'text', value: prize.name, placeholder: 'Nombre del premio' });
-    const winner = el('input', { type: 'text', value: prize.winner, inputMode: 'numeric', maxLength: 4, placeholder: 'N° ganador' });
+    const name = el('input', { type: 'text', className: 'prize-name', value: prize.name, placeholder: 'Nombre del premio' });
+    const winner = el('input', { type: 'text', className: 'prize-winner', value: prize.winner, inputMode: 'numeric', maxLength: 4, placeholder: 'Ganador' });
     const result = el('span', { className: 'msg' });
     const remove = el('button', { type: 'button', className: 'danger' }, 'Quitar');
 
@@ -839,20 +968,32 @@ function renderPrizes() {
       const who = sale.studentId ? ` (vendido por ${studentName(sale.studentId)})` : '';
       setMsg(result, `¡Ganó ${sale.buyer}!${sale.phone ? ' Tel: ' + sale.phone : ''}${who}`, 'ok');
     };
-    name.addEventListener('input', () => { prize.name = name.value; saveConfig(); });
+    // Cada guardado vuelve a llegar de Firebase como objetos nuevos: por eso se busca el premio
+    // por su id en cada cambio, en vez de usar el objeto que había al dibujar la pantalla.
+    const current = () => state.prizes.find((p) => p.id === prize.id);
+    name.addEventListener('input', () => {
+      const p = current();
+      if (p) { p.name = name.value; saveConfig(); }
+    });
     winner.addEventListener('input', () => {
       winner.value = winner.value.replace(/\D/g, '');
-      prize.winner = winner.value;
-      saveConfig();
+      const p = current();
+      if (p) { p.winner = winner.value; saveConfig(); }
       showResult();
     });
     remove.addEventListener('click', () => {
       deleteDoc(doc(db, 'prizeImages', prize.id)).catch(() => {});
-      state.prizes.splice(i, 1);
+      state.prizes = state.prizes.filter((p) => p.id !== prize.id);
       saveConfig();
       renderPrizes();
     });
-    row.append(el('span', { className: 'prize-n' }, String(i + 1) + '°'), name, winner, remove, media, result);
+    const desc = el('input', { type: 'text', className: 'prize-desc', value: prize.desc || '',
+      placeholder: 'Descripción (ej: Asus Vivobook 15.6", Core i3, 8 GB RAM, 128 GB SSD)' });
+    desc.addEventListener('input', () => {
+      const p = current();
+      if (p) { p.desc = desc.value; saveConfig(); }
+    });
+    row.append(el('span', { className: 'prize-n' }, String(i + 1) + '°'), name, winner, remove, desc, media, result);
     box.append(row);
     showResult();
   });
@@ -1011,16 +1152,16 @@ $('btn-csv').addEventListener('click', () => {
     lines.push([num, s.buyer, s.phone, studentName(s.studentId), fmtDate(s.ts), priceOf(s), s.proofId ? 'Si' : 'No', s.by]
       .map(quote).join(','));
   }
-  download('rifa-ventas.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  download('bono-ventas.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 });
 
 $('btn-backup').addEventListener('click', async () => {
   try {
     const data = {
-      goal: state.goal, prizes: state.prizes,
+      goal: state.goal, prizes: state.prizes, ad: state.ad,
       students: state.students, sales: state.sales, proofs: await allProofs(),
     };
-    download('rifa-respaldo.json', JSON.stringify(data), 'application/json');
+    download('bono-respaldo.json', JSON.stringify(data), 'application/json');
   } catch (e) {
     alert('No se pudo armar el respaldo: ' + e.message);
   }
@@ -1053,7 +1194,7 @@ $('file-restore').addEventListener('change', async () => {
     for (const [id, s] of Object.entries(data.students)) ops.push((b) => b.set(doc(db, 'students', id), s));
     for (const [id, url] of Object.entries(data.proofs || {})) ops.push((b) => b.set(doc(db, 'proofs', id), { data: url }));
     ops.push((b) => b.set(doc(db, 'config', 'main'), {
-      goal: data.goal || 0, prizes: data.prizes || defaultPrizes(),
+      goal: data.goal || 0, prizes: data.prizes || defaultPrizes(), ad: { ...defaultAd(), ...(data.ad || {}) },
     }));
     await runBatched(ops);
     alert('Respaldo restaurado.');
