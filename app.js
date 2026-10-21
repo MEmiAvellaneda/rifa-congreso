@@ -1,6 +1,6 @@
 // Rifa: números del 0000 al 9999, repartidos al azar entre alumnos.
 // Los datos viven en Firebase (Firestore) y se comparten en tiempo real:
-//   config/main      { price, goal, prizes: [{ id, name, winner }] }
+//   config/main      { goal, prizes: [{ id, name, winner }] }
 //   students/{id}    { name, numbers: ["0042", ...] }
 //   sales/{número}   { buyer, phone, studentId|null, proofId, ts, price, by }
 //   proofs/{id}      { data: "data:image/jpeg;base64,..." }
@@ -17,8 +17,9 @@ import {
 import { firebaseConfig } from './firebase-config.js';
 
 const TOTAL = 10000;
+const PRICE = 4000; // precio fijo por número
 const BLOCK_SIZE = 100;
-const MIN_PER_STUDENT = 10;
+const MIN_PER_STUDENT = 15;
 const MAX_ROWS = 300;
 const DAY = 86400000;
 const DIRECT = 'Venta directa (sin alumno)';
@@ -26,12 +27,14 @@ const DIRECT = 'Venta directa (sin alumno)';
 const $ = (id) => document.getElementById(id);
 const pad = (n) => String(n).padStart(4, '0');
 const money = (n) => '$' + Math.round(n).toLocaleString('es-AR');
+// Las ventas con precio vacío o en 0 (de pruebas viejas) cuentan al precio fijo
+const priceOf = (s) => s.price || PRICE;
 
 const defaultPrizes = () => [
   { id: 'p' + Date.now(), name: 'Notebook', winner: '' },
   { id: 'p' + (Date.now() + 1), name: 'Auriculares', winner: '' },
 ];
-const state = { price: 0, goal: 0, prizes: defaultPrizes(), students: {}, sales: {}, prizeImages: {} };
+const state = { goal: 0, prizes: defaultPrizes(), students: {}, sales: {}, prizeImages: {} };
 let currentBlock = 0;
 const picked = new Set(); // números tocados en el formulario de venta
 
@@ -104,7 +107,7 @@ function statsFor(id) {
   return {
     assigned: numbers.length,
     sold: sales.length,
-    collected: sales.reduce((t, s) => t + s.price, 0),
+    collected: sales.reduce((t, s) => t + priceOf(s), 0),
   };
 }
 
@@ -209,7 +212,7 @@ $('student-form').addEventListener('submit', async (e) => {
 
 function renderStats() {
   const sales = Object.values(state.sales);
-  const collected = sales.reduce((t, s) => t + s.price, 0);
+  const collected = sales.reduce((t, s) => t + priceOf(s), 0);
   const owner = ownerMap();
   const assignedUnsold = Object.keys(owner).filter((n) => !state.sales[n]).length;
   const used = new Set([...Object.keys(owner), ...Object.keys(state.sales)]);
@@ -252,7 +255,7 @@ function renderLineChart() {
   const days = Math.min(366, Math.round((startOfDay(Date.now()) - start) / DAY) + 1);
   const perDay = new Array(days).fill(0);
   const dayIndex = (t) => Math.max(0, Math.min(days - 1, Math.round((startOfDay(t) - start) / DAY)));
-  for (const s of sales) perDay[dayIndex(s.ts)] += s.price;
+  for (const s of sales) perDay[dayIndex(s.ts)] += priceOf(s);
   const total = perDay.reduce((acc, v, i) => (acc.push((acc[i - 1] || 0) + v), acc), []);
 
   // El gráfico toma el ancho disponible (en el celular, menos que en la compu)
@@ -533,7 +536,7 @@ function drawShareImage(name, numbers, logo, prizePics = []) {
     fitText(ctx, `${prizes.length > 1 ? 'Premios' : 'Premio'}: ${prizes.join(' · ')}`, W / 2, bandTop + 78, W - 120, 56);
   }
   const info = [];
-  if (state.price > 0) info.push(`Cada número: ${money(state.price)}`);
+  info.push(`Cada número: ${money(PRICE)}`);
   info.push('Sorteo por la Quiniela');
   ctx.fillStyle = '#fdba74';
   fitText(ctx, info.join('  ·  '), W / 2, bandTop + 130, W - 120, 38, 'normal');
@@ -747,7 +750,7 @@ $('sale-form').addEventListener('submit', async (e) => {
         studentId: id,
         proofId,
         ts: now,
-        price: state.price,
+        price: PRICE,
         by: auth.currentUser.email,
       }));
     });
@@ -766,31 +769,25 @@ $('sale-form').addEventListener('submit', async (e) => {
   setMsg(msg, `Venta guardada: ${numbers.join(', ')}`, 'ok');
 });
 
-/* ---------- Configuración (precio, meta, premios) ---------- */
+/* ---------- Configuración (meta y premios) ---------- */
 
 let configTimer;
 function saveConfig() {
   clearTimeout(configTimer);
   configTimer = setTimeout(() => {
-    setDoc(doc(db, 'config', 'main'), { price: state.price, goal: state.goal, prizes: state.prizes }).catch(showError);
+    setDoc(doc(db, 'config', 'main'), { goal: state.goal, prizes: state.prizes }).catch(showError);
   }, 500);
 }
 
 const isEditing = (node) => node.contains(document.activeElement);
 
 function applyConfig(data) {
-  state.price = (data && data.price) || 0;
   state.goal = (data && data.goal) || 0;
   state.prizes = data && Array.isArray(data.prizes) ? data.prizes : defaultPrizes();
-  if (document.activeElement !== $('price')) $('price').value = state.price;
   if (document.activeElement !== $('goal')) $('goal').value = state.goal;
   if (!isEditing($('prizes'))) renderPrizes();
 }
 
-$('price').addEventListener('change', () => {
-  state.price = Math.max(0, Number($('price').value) || 0);
-  saveConfig();
-});
 $('goal').addEventListener('change', () => {
   state.goal = Math.max(0, Number($('goal').value) || 0);
   saveConfig();
@@ -970,7 +967,7 @@ function openDetail(num) {
     ['Contacto', s.phone || '—'],
     ['Vendedor/a', studentName(s.studentId)],
     ['Fecha de venta', fmtDate(s.ts)],
-    ['Precio', money(s.price)],
+    ['Precio', money(priceOf(s))],
     ['Registrada por', s.by || '—'],
     ['Comprobante', s.proofId ? 'Adjunto' : 'Sin comprobante'],
   ];
@@ -1011,7 +1008,7 @@ $('btn-csv').addEventListener('click', () => {
   const lines = ['Numero,Comprador,Contacto,Vendedor,Fecha venta,Precio,Comprobante,Registrada por'];
   for (const num of Object.keys(state.sales).sort()) {
     const s = state.sales[num];
-    lines.push([num, s.buyer, s.phone, studentName(s.studentId), fmtDate(s.ts), s.price, s.proofId ? 'Si' : 'No', s.by]
+    lines.push([num, s.buyer, s.phone, studentName(s.studentId), fmtDate(s.ts), priceOf(s), s.proofId ? 'Si' : 'No', s.by]
       .map(quote).join(','));
   }
   download('rifa-ventas.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
@@ -1020,7 +1017,7 @@ $('btn-csv').addEventListener('click', () => {
 $('btn-backup').addEventListener('click', async () => {
   try {
     const data = {
-      price: state.price, goal: state.goal, prizes: state.prizes,
+      goal: state.goal, prizes: state.prizes,
       students: state.students, sales: state.sales, proofs: await allProofs(),
     };
     download('rifa-respaldo.json', JSON.stringify(data), 'application/json');
@@ -1056,7 +1053,7 @@ $('file-restore').addEventListener('change', async () => {
     for (const [id, s] of Object.entries(data.students)) ops.push((b) => b.set(doc(db, 'students', id), s));
     for (const [id, url] of Object.entries(data.proofs || {})) ops.push((b) => b.set(doc(db, 'proofs', id), { data: url }));
     ops.push((b) => b.set(doc(db, 'config', 'main'), {
-      price: data.price || 0, goal: data.goal || 0, prizes: data.prizes || defaultPrizes(),
+      goal: data.goal || 0, prizes: data.prizes || defaultPrizes(),
     }));
     await runBatched(ops);
     alert('Respaldo restaurado.');

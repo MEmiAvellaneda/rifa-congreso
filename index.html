@@ -33,14 +33,11 @@
       <div class="progress" aria-hidden="true"><div id="bar-goal" class="fill goal"></div></div>
 
       <div class="settings">
-        <label class="inline">Precio por número ($)
-          <input type="number" id="price" min="0" step="1" value="0">
-        </label>
+        <p class="price-fixed">Precio por número: <strong>$4.000</strong></p>
         <label class="inline">Meta de recaudación ($)
           <input type="number" id="goal" min="0" step="1" value="0">
         </label>
       </div>
-      <small class="hint">Cambiar el precio no modifica ventas ya registradas.</small>
     </section>
 
     <!-- Gráficos -->
@@ -59,8 +56,8 @@
         <label>Nombre del alumno/a
           <input type="text" id="s-name" required>
         </label>
-        <label>Cantidad de números (mín. 10)
-          <input type="number" id="s-count" min="10" max="1000" value="10" required>
+        <label>Cantidad de números (mín. 15)
+          <input type="number" id="s-count" min="15" max="1000" value="15" required>
         </label>
         <button type="submit" class="primary">Agregar y asignar al azar</button>
       </form>

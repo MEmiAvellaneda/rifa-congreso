@@ -271,3 +271,6 @@ button, .cell, .chip { touch-action: manipulation; }
 .file-btn:hover { background: #f3f4f6; }
 
 .hero p strong { color: var(--text); }
+
+.price-fixed { margin: 12px 20px 0 0; font-size: 1rem; }
+.price-fixed strong { font-size: 1.15rem; }
