@@ -253,7 +253,6 @@ button, .cell, .chip { touch-action: manipulation; }
   td[data-label]::before { content: attr(data-label); color: var(--muted); font-weight: 600; text-align: left; }
   td:first-child { font-weight: 700; font-size: 1.05rem; }
   td:first-child::before { font-size: .9rem; font-weight: 600; }
-  .stat:last-child { grid-column: 1 / -1; }
   td:last-child { justify-content: flex-end; padding-top: 8px; }
   td button { padding: 0 16px; font-size: .9rem; }
 
@@ -298,3 +297,9 @@ input[type=tel] { width: 100%; margin-top: 4px; padding: 9px 10px; border: 1px s
   .prize-row > button { order: 5; grid-column: 2; }
   .prize-row .msg { order: 6; grid-column: 1 / -1; margin: 0; }
 }
+
+/* Lo que tiene el atributo hidden no se muestra, aunque otra regla le ponga display */
+[hidden] { display: none !important; }
+
+/* Aviso de datos que faltan en la imagen */
+.share-note { margin: 0 0 10px; padding: 9px 12px; background: #fff7ed; border: 1px solid #fdba74; border-radius: 8px; font-size: .88rem; line-height: 1.35; color: #7c2d12; }

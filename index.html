@@ -117,19 +117,19 @@
       <h2 id="t-publicidad">Datos para la publicidad</h2>
       <p class="hint">Estos textos salen en la imagen para compartir. Los que dejes vacíos no se muestran.</p>
       <div class="row-form">
-        <label>Título
-          <input type="text" id="ad-title" maxlength="40">
+        <label>Fecha del sorteo
+          <input type="text" id="ad-date" maxlength="30" placeholder="Ej: 19/02/2027">
         </label>
-        <label>Teléfono general (se usa si el alumno no cargó el suyo)
-          <input type="text" id="ad-contact" maxlength="60" placeholder="Ej: 381 555 1234">
+        <label>Lotería / modalidad
+          <input type="text" id="ad-note" maxlength="60" placeholder="Ej: Por la Quiniela - 4 cifras">
         </label>
       </div>
       <div class="row-form">
-        <label>Sorteo
-          <input type="text" id="ad-draw" maxlength="90" placeholder="Ej: Se sortea el 29/11 - Lotería vespertina de Tucumán (4 cifras)">
-        </label>
         <label>Promoción (opcional)
-          <input type="text" id="ad-promo" maxlength="60" placeholder="Ej: Promo 3 números $10.000">
+          <input type="text" id="ad-promo" maxlength="60" placeholder="Ej: 3 números $10.000">
+        </label>
+        <label>Teléfono general (si el alumno no cargó el suyo)
+          <input type="text" id="ad-contact" maxlength="60" placeholder="Ej: 381 555 1234">
         </label>
       </div>
       <label>Texto de presentación
@@ -208,6 +208,7 @@
   <dialog id="share">
     <h3 id="share-title"></h3>
     <p class="hint">Se arma con los números actuales del alumno. Los vendidos salen tachados.</p>
+    <p id="share-note" class="share-note" hidden></p>
     <img id="share-img" alt="Imagen con los números del alumno">
     <div class="btn-row">
       <button type="button" id="share-send" class="primary" hidden>Compartir</button>

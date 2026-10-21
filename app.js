@@ -31,16 +31,18 @@ const money = (n) => '$' + Math.round(n).toLocaleString('es-AR');
 const priceOf = (s) => s.price || PRICE;
 
 const defaultPrizes = () => [
-  { id: 'p' + Date.now(), name: 'Notebook', winner: '' },
-  { id: 'p' + (Date.now() + 1), name: 'Auriculares', winner: '' },
+  { id: 'p' + Date.now(), name: 'Notebook', desc: '', winner: '' },
+  { id: 'p' + (Date.now() + 1), name: 'Auriculares', desc: '', winner: '' },
+  { id: 'p' + (Date.now() + 2), name: 'Mouse y teclado inalámbrico', desc: '', winner: '' },
+  { id: 'p' + (Date.now() + 3), name: 'Smartwatch', desc: '', winner: '' },
 ];
 // Textos de la imagen de publicidad (se editan desde la página)
 const defaultAd = () => ({
-  title: 'BONO CONTRIBUCIÓN',
   contact: '',
-  draw: 'Sorteo por la Quiniela',
-  promo: '',
-  about: 'Somos estudiantes de Ingeniería en Sistemas y organizamos este Bono Contribución para recaudar fondos y participar del Viaje Académico y de Inmersión Tecnológica 2027. ¡Tu colaboración nos acerca a nuestro sueño!',
+  drawDate: '19/02/2027',
+  drawNote: 'Lotería vespertina de Tucumán (4 cifras)',
+  promo: '3 números $10.000',
+  about: 'A beneficio del Viaje Académico y de Inmersión Tecnológica 2027: Tech Show London e IBM Quantum Spain. ¡Tu colaboración nos acerca a nuestro sueño!',
 });
 
 const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, prizeImages: {} };
@@ -513,8 +515,26 @@ async function loadPrizePics() {
   return pics;
 }
 
-const INK = '#18181b';
-const ACCENT = '#ea580c';
+// Fondo del diseño (ventanilla de avión con el título). Si no está en la carpeta, la cabecera se arma sin él.
+let fondoPromise;
+function loadFondo() {
+  fondoPromise ||= new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = 'fondo-bono.jpg';
+  });
+  return fondoPromise;
+}
+
+// Colores del diseño
+const VERDE = '#395428';
+const VERDE_OSCURO = '#1e3126';
+const CREMA = '#faf9f5';
+const GRIS_CAJA = '#edede7';
+const GRIS_FILA = '#f5f4ef';
+const INK = '#141716';
+const TEXTO_SUAVE = '#686967';
 
 // Parte un texto en renglones que entren en el ancho dado
 function wrapLines(ctx, text, maxWidth, size, weight = 'normal') {
@@ -535,182 +555,243 @@ function card(ctx, x, y, w, h, radius, fill, stroke) {
   roundRectPath(ctx, x, y, w, h, radius);
   ctx.fillStyle = fill;
   ctx.fill();
-  if (stroke) { ctx.lineWidth = 3; ctx.strokeStyle = stroke; ctx.stroke(); }
+  if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); }
 }
 
-// Dibuja la imagen de publicidad: cabecera con logo, premios con foto, precio, números del alumno y contacto.
-function drawShareImage(name, numbers, logo, pics = {}, phone = '') {
-  const W = 1080, M = 68, CW = W - 2 * M, CX = W / 2;
-  const COLS = 5, CELL_W = 176, CELL_H = 84, GAP = 16;
+// Texto con separación entre letras (como los rótulos del diseño)
+function spaced(ctx, text, x, y, spacing) {
+  if ('letterSpacing' in ctx) {
+    ctx.letterSpacing = spacing + 'px';
+    ctx.fillText(text, x, y);
+    ctx.letterSpacing = '0px';
+  } else {
+    ctx.fillText(text, x, y);
+  }
+}
+
+// Dibuja la imagen de publicidad siguiendo el diseño del volante. Se trabaja en un ancho de 1024 (el del diseño)
+// y se escala a 1080. Los premios son tantos como haya cargados.
+function drawShareImage(name, numbers, logo, pics = {}, phone = '', fondo = null) {
+  const OUT_W = 1080, D = 1024, S = OUT_W / D;
+  const COLS = 5, CELL_W = 172, CELL_H = 76, GAP = 14;
   const ad = state.ad;
   const prizes = state.prizes.filter((p) => p.name.trim());
+  const promo = ad.promo.trim();
+  const drawDate = ad.drawDate.trim();
+  const drawNote = ad.drawNote.trim();
+  const contact = (phone || '').trim() || ad.contact.trim();
 
-  // render dibuja todo y devuelve el alto que necesitó; se usa una vez para medir y otra para el lienzo final
+  // render dibuja todo y devuelve el alto usado (en unidades del diseño); una vez para medir y otra para el lienzo final
   const render = (ctx, H) => {
+    ctx.setTransform(S, 0, 0, S, 0, 0);
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#f5f4f2';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = CREMA;
+    ctx.fillRect(0, 0, D, H / S);
 
-    /* Cabecera */
-    const logoH = logo ? Math.min(190, 620 * logo.height / logo.width) : 0;
-    const logoW = logo ? logoH * logo.width / logo.height : 0;
-    const top = logo ? 36 + logoH + 26 : 44;
-    const titleY = top + 92, line1Y = titleY + 66, line2Y = line1Y + 54, line3Y = line2Y + 54;
-    const headerBottom = line3Y + 42;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, W, headerBottom);
-    ctx.fillStyle = ACCENT;
-    ctx.fillRect(0, 0, W, 14);
-    ctx.fillRect(0, headerBottom, W, 6);
-    if (logo) ctx.drawImage(logo, (W - logoW) / 2, 36, logoW, logoH);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = INK;
-    fitText(ctx, (ad.title.trim() || 'BONO CONTRIBUCIÓN').toUpperCase(), CX, titleY, W - 120, 100);
-    ctx.fillStyle = '#6b7280';
-    fitText(ctx, 'A beneficio del', CX, line1Y, W - 100, 34, 'normal');
-    ctx.fillStyle = INK;
-    fitText(ctx, 'Viaje Académico y de Inmersión Tecnológica 2027', CX, line2Y, W - 80, 44);
-    fitText(ctx, 'Tech Show London e IBM Quantum Spain', CX, line3Y, W - 80, 44);
-    let y = headerBottom + 6 + 54;
-
-    /* Premios: una tarjeta por premio, con su descripción y su foto */
-    if (prizes.length) {
+    /* Cabecera: el fondo del diseño (título + ventanilla) y el 2027 al lado de EUROTRIP */
+    if (fondo) {
+      ctx.drawImage(fondo, 0, 0, 1024, 548, 0, 0, 1024, 548);
       ctx.textAlign = 'left';
-      ctx.fillStyle = ACCENT;
-      ctx.font = `bold 34px ${FONT}`;
-      ctx.fillText(prizes.length > 1 ? 'PREMIOS' : 'PREMIO', M, y + 28);
-      y += 56;
-      prizes.forEach((prize, i) => {
-        const img = pics[prize.id];
-        const PHOTO = 190;
-        const textX = M + 118;
-        const textW = CW - 118 - 28 - (img ? PHOTO + 28 : 0);
-        const descLines = prize.desc && prize.desc.trim() ? wrapLines(ctx, prize.desc.trim(), textW, 30) : [];
-        const h = Math.max(img ? PHOTO + 40 : 124, 36 + 56 + descLines.length * 40 + 24);
-        card(ctx, M, y, CW, h, 24, '#fff', '#e4e2dd');
+      ctx.fillStyle = INK;
+      ctx.font = `300 82px ${FONT}`;
+      ctx.fillText('2027', 470, 406);
+    } else {
+      ctx.fillStyle = VERDE_OSCURO;
+      ctx.fillRect(0, 0, D, 548);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      fitText(ctx, 'BONO CONTRIBUCIÓN', D / 2, 250, 900, 96);
+      fitText(ctx, 'EUROTRIP 2027', D / 2, 350, 900, 70, 'normal');
+    }
+    let y = 548;
 
+    /* Premios: contenedor con una fila por premio */
+    if (prizes.length) {
+      const rows = prizes.map((prize) => {
+        const img = pics[prize.id];
+        const textW = img ? 500 : 800;
+        const desc = prize.desc && prize.desc.trim() ? wrapLines(ctx, prize.desc.trim(), textW, 20) : [];
+        return { prize, img, textW, desc, h: Math.max(124, 34 + 36 + desc.length * 26 + 24) };
+      });
+      const boxTop = y;
+      const boxH = 72 + rows.reduce((t, r) => t + r.h + 14, 0) + 6;
+      card(ctx, 34, boxTop, 956, boxH, 30, GRIS_CAJA, null);
+      card(ctx, 54, boxTop + 14, 190, 44, 22, VERDE, null);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.font = `500 24px ${FONT}`;
+      spaced(ctx, prizes.length > 1 ? 'PREMIOS' : 'PREMIO', 54 + 95 + 2, boxTop + 14 + 31, 3);
+
+      let ry = boxTop + 72;
+      rows.forEach((row, i) => {
+        card(ctx, 50, ry, 925, row.h, 24, GRIS_FILA, null);
         ctx.beginPath();
-        ctx.arc(M + 58, y + h / 2, 32, 0, Math.PI * 2);
-        ctx.fillStyle = INK;
+        ctx.arc(92, ry + row.h / 2, 31, 0, Math.PI * 2);
+        ctx.fillStyle = VERDE;
         ctx.fill();
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fff';
-        ctx.font = `bold 36px ${FONT}`;
-        ctx.fillText(String(i + 1), M + 58, y + h / 2 + 13);
+        ctx.font = `bold 34px ${FONT}`;
+        ctx.fillText(String(i + 1), 92, ry + row.h / 2 + 12);
 
         ctx.textAlign = 'left';
         ctx.fillStyle = INK;
-        const nameY = descLines.length ? y + 36 + 40 : y + h / 2 + 15;
-        fitText(ctx, prize.name.trim(), textX, nameY, textW, 46);
-        ctx.fillStyle = '#4b5563';
-        ctx.font = `normal 30px ${FONT}`;
-        descLines.forEach((line, k) => ctx.fillText(line, textX, nameY + 44 + k * 40));
+        const nameY = row.desc.length ? ry + 28 + 28 : ry + row.h / 2 + 10;
+        fitText(ctx, row.prize.name.trim(), 144, nameY, row.textW, 29);
+        ctx.fillStyle = TEXTO_SUAVE;
+        ctx.font = `normal 20px ${FONT}`;
+        row.desc.forEach((line, k) => ctx.fillText(line, 144, nameY + 30 + k * 26));
 
-        if (img) {
-          const px = M + CW - 28 - PHOTO, py = y + (h - PHOTO) / 2;
-          card(ctx, px, py, PHOTO, PHOTO, 18, '#f5f4f2', null);
-          const k = Math.min((PHOTO - 20) / img.width, (PHOTO - 20) / img.height); // entra entera, sin deformarse
-          ctx.drawImage(img, px + (PHOTO - img.width * k) / 2, py + (PHOTO - img.height * k) / 2, img.width * k, img.height * k);
+        if (row.img) {
+          const boxW = 290, boxH2 = row.h - 16;
+          const k = Math.min(boxW / row.img.width, boxH2 / row.img.height);
+          const w = row.img.width * k, h = row.img.height * k;
+          ctx.drawImage(row.img, 975 - 18 - boxW + (boxW - w) / 2, ry + (row.h - h) / 2, w, h);
         }
-        y += h + 18;
+        ry += row.h + 14;
       });
-      y += 18;
+      y = boxTop + boxH + 14;
     }
 
-    /* Precio, promoción y sorteo */
-    const promo = ad.promo.trim();
-    const draw = ad.draw.trim();
-    const labelY = y + 62, priceY = labelY + 90;
-    const promoY = priceY + 62;
-    const drawY = (promo ? promoY : priceY) + 58;
-    const bandH = (draw ? drawY : (promo ? promoY : priceY)) - y + 40;
-    card(ctx, M, y, CW, bandH, 24, INK, null);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#fdba74';
-    fitText(ctx, 'PRECIO POR NÚMERO', CX, labelY, CW - 60, 30);
-    ctx.fillStyle = '#fff';
-    fitText(ctx, money(PRICE), CX, priceY, CW - 60, 92);
-    if (promo) {
-      ctx.fillStyle = '#fb923c';
-      fitText(ctx, promo, CX, promoY, CW - 60, 40);
+    /* Precio y promoción */
+    const BOX_H = 168;
+    const wide = !promo;
+    const priceW = wide ? 956 : 471;
+    card(ctx, 34, y, priceW, BOX_H, 28, '#efefe6', null);
+    if (fondo) ctx.drawImage(fondo, 52, 1038, 104, 94, 52, y + 37, 104, 94);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = TEXTO_SUAVE;
+    ctx.font = `500 22px ${FONT}`;
+    spaced(ctx, wide ? 'PRECIO POR NÚMERO' : 'PRECIO', 172, y + 52, 3);
+    ctx.fillStyle = INK;
+    fitText(ctx, money(PRICE), 172, y + 128, priceW - 172 - 20, 64);
+    if (!wide) {
+      card(ctx, 519, y, 471, BOX_H, 28, '#dce9d3', null);
+      if (fondo) ctx.drawImage(fondo, 534, 1038, 102, 94, 537, y + 37, 102, 94);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#3d5a2c';
+      ctx.font = `500 22px ${FONT}`;
+      spaced(ctx, 'PROMOCIÓN', 656, y + 52, 3);
+      ctx.fillStyle = INK;
+      const promoLines = wrapLines(ctx, promo, 310, 30, 'bold').slice(0, 3);
+      const pFont = promoLines.length > 2 ? 24 : 30;
+      ctx.font = `bold ${pFont}px ${FONT}`;
+      promoLines.forEach((line, k) => ctx.fillText(line, 656, y + 96 + k * (pFont + 8)));
     }
-    if (draw) {
-      ctx.fillStyle = '#d6d3d1';
-      fitText(ctx, draw, CX, drawY, CW - 60, 34, 'normal');
-    }
-    y += bandH + 56;
+    y += BOX_H + 14;
 
     /* Números del alumno */
-    ctx.fillStyle = '#6b7280';
-    fitText(ctx, 'Números de', CX, y + 30, W - 120, 36, 'normal');
-    ctx.fillStyle = INK;
-    fitText(ctx, name, CX, y + 100, W - 120, 68);
-    const gridTop = y + 140;
-    const padX = (W - (COLS * CELL_W + (COLS - 1) * GAP)) / 2;
+    const numRows = Math.ceil(numbers.length / COLS);
+    const numH = 14 + 44 + 22 + numRows * (CELL_H + GAP) + 10;
+    card(ctx, 34, y, 956, numH, 30, GRIS_CAJA, null);
+    const title = ('Números de ' + name).toUpperCase();
+    ctx.font = `500 24px ${FONT}`;
+    const titleW = Math.min(900, (ctx.measureText(title).width || 300) + 60 + title.length * 2.4);
+    card(ctx, 54, y + 14, titleW, 44, 22, VERDE, null);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    spaced(ctx, title, 54 + 28, y + 14 + 31, 2.4);
+    const gridTop = y + 14 + 44 + 22;
+    const gx = 54 + (916 - (COLS * CELL_W + (COLS - 1) * GAP)) / 2;
     numbers.forEach((n, i) => {
-      const x = padX + (i % COLS) * (CELL_W + GAP);
+      const cx = gx + (i % COLS) * (CELL_W + GAP);
       const cy = gridTop + Math.floor(i / COLS) * (CELL_H + GAP);
       const sold = Boolean(state.sales[n]);
-      card(ctx, x, cy, CELL_W, CELL_H, 16, sold ? '#e7e5e4' : '#fff', null);
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = sold ? '#d6d3d1' : INK;
-      ctx.stroke();
-      ctx.fillStyle = sold ? '#a8a29e' : INK;
-      ctx.font = `bold 46px ${FONT}`;
+      card(ctx, cx, cy, CELL_W, CELL_H, 18, sold ? '#dedcd4' : '#fff', null);
+      if (!sold) { ctx.lineWidth = 3; ctx.strokeStyle = VERDE; ctx.stroke(); }
       ctx.textAlign = 'center';
-      ctx.fillText(n, x + CELL_W / 2, cy + CELL_H / 2 + 16);
+      ctx.fillStyle = sold ? '#a3a399' : '#1c2a1f';
+      ctx.font = `bold 40px ${FONT}`;
+      ctx.fillText(n, cx + CELL_W / 2, cy + CELL_H / 2 + 14);
       if (sold) {
-        ctx.strokeStyle = '#a8a29e';
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#a3a399';
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(x + 22, cy + CELL_H / 2 + 2);
-        ctx.lineTo(x + CELL_W - 22, cy + CELL_H / 2 + 2);
+        ctx.moveTo(cx + 20, cy + CELL_H / 2 + 2);
+        ctx.lineTo(cx + CELL_W - 20, cy + CELL_H / 2 + 2);
         ctx.stroke();
       }
     });
-    y = gridTop + Math.ceil(numbers.length / COLS) * (CELL_H + GAP) + 24;
+    y += numH + 14;
 
-    y += 24;
-
-    /* Contacto para reservar: el teléfono del alumno (o el general, si el alumno no cargó el suyo) */
+    /* Franja verde: reservá tu número + sorteo */
+    const splitX = drawDate ? 600 : 992;
+    const leftCx = (32 + splitX) / 2;
+    const PILL_X = 712, PILL_W = 260, PILL_CX = PILL_X + PILL_W / 2;
+    const noteLines = drawDate && drawNote ? wrapLines(ctx, drawNote, 268, 19).slice(0, 3) : [];
+    const BAND_H = Math.max(184, 152 + Math.max(0, noteLines.length - 1) * 24 + 36);
+    card(ctx, 32, y, 960, BAND_H, 32, VERDE_OSCURO, null);
     ctx.textAlign = 'center';
-    const contact = (phone || '').trim() || ad.contact.trim();
     if (contact) {
-      ctx.fillStyle = '#6b7280';
-      fitText(ctx, `RESERVÁ TU NÚMERO CON ${name.toUpperCase()}`, CX, y + 26, CW, 32);
-      card(ctx, M, y + 48, CW, 130, 20, '#e7e5e4', null);
-      ctx.fillStyle = INK;
-      fitText(ctx, contact, CX, y + 48 + 86, CW - 60, 72);
-      y += 48 + 130 + 48;
+      ctx.fillStyle = '#e5ebe6';
+      ctx.font = `500 22px ${FONT}`;
+      spaced(ctx, 'RESERVÁ TU NÚMERO CON', leftCx + 1, y + 50, 3);
+      ctx.fillStyle = '#fff';
+      fitText(ctx, contact, leftCx, y + 118, splitX - 32 - 50, 56);
+      ctx.fillStyle = '#c9d3cb';
+      fitText(ctx, name, leftCx, y + 156, splitX - 32 - 50, 24, 'normal');
     } else {
-      ctx.fillStyle = '#6b7280';
-      fitText(ctx, `Pedile tu número a ${name}`, CX, y + 26, W - 120, 38, 'normal');
-      y += 84;
+      ctx.fillStyle = '#fff';
+      fitText(ctx, `Pedile tu número a ${name}`, leftCx, y + 108, splitX - 32 - 50, 38);
     }
-
-    /* Texto de presentación */
-    const about = ad.about.trim();
-    if (about) {
-      const lines = wrapLines(ctx, about, CW - 64, 30);
-      const h = 40 + lines.length * 42 + 22;
-      card(ctx, M, y, CW, h, 24, '#fff', '#e4e2dd');
+    if (drawDate) {
+      ctx.strokeStyle = '#6f8a74';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(splitX, y + 36);
+      ctx.lineTo(splitX, y + BAND_H - 36);
+      ctx.stroke();
+      if (fondo) ctx.drawImage(fondo, 676, 1218, 60, 60, 638, y + 34, 60, 60);
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#374151';
-      ctx.font = `normal 30px ${FONT}`;
-      lines.forEach((line, k) => ctx.fillText(line, M + 32, y + 56 + k * 42));
-      y += h;
+      ctx.fillStyle = '#dfe7e0';
+      ctx.font = `500 19px ${FONT}`;
+      spaced(ctx, 'SE SORTEA EL DÍA:', PILL_X, y + 56, 2);
+      card(ctx, PILL_X, y + 70, PILL_W, 52, 16, '#e1dfd8', null);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#19201e';
+      fitText(ctx, drawDate, PILL_CX, y + 107, PILL_W - 24, 30);
+      ctx.fillStyle = '#fff';
+      ctx.font = `normal 19px ${FONT}`;
+      noteLines.forEach((line, k) => ctx.fillText(line, PILL_CX, y + 152 + k * 24));
     }
-    return y + 48;
+    y += BAND_H + 14;
+
+    /* Mensaje final: globo, texto y avioncito */
+    const about = ad.about.trim();
+    const textW = 470;
+    const aboutLines = about ? wrapLines(ctx, about, textW, 22, 'bold') : [];
+    const endH = Math.max(112, 40 + aboutLines.length * 30);
+    card(ctx, 34, y, 956, endH, 28, '#f9f8f4', '#9ca6a2');
+    if (fondo) {
+      ctx.drawImage(fondo, 62, 1398, 90, 90, 56, y + (endH - 90) / 2, 90, 90);
+      ctx.drawImage(fondo, 645, 1396, 330, 94, 645, y + endH - 94 - 6, 330, 94);
+    }
+    ctx.textAlign = 'left';
+    ctx.fillStyle = INK;
+    ctx.font = `bold 22px ${FONT}`;
+    const textTop = y + (endH - aboutLines.length * 30) / 2 + 22;
+    aboutLines.forEach((line, k) => ctx.fillText(line, 168, textTop + k * 30));
+    y += endH + 28;
+
+    /* Logo de la facultad */
+    if (logo) {
+      const lh = 96, lw = lh * logo.width / logo.height;
+      ctx.globalCompositeOperation = 'multiply'; // el blanco del logo se funde con el fondo crema
+      ctx.drawImage(logo, (D - lw) / 2, y, lw, lh);
+      ctx.globalCompositeOperation = 'source-over';
+      y += lh + 20;
+    }
+    return y + 22;
   };
 
   const probe = document.createElement('canvas');
-  probe.width = W;
-  probe.height = 7000;
-  const H = Math.max(1080, Math.ceil(render(probe.getContext('2d'), 7000)));
+  probe.width = OUT_W;
+  probe.height = 9000;
+  const designH = render(probe.getContext('2d'), 9000);
   const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  render(canvas.getContext('2d'), H);
+  canvas.width = OUT_W;
+  canvas.height = Math.ceil(designH * S);
+  render(canvas.getContext('2d'), canvas.height);
   return canvas;
 }
 
@@ -719,7 +800,7 @@ let shareUrl = null;
 
 async function openShare(name, numbers, phone = '') {
   try {
-    const canvas = drawShareImage(name, numbers, await loadLogo(), await loadPrizePics(), phone);
+    const canvas = drawShareImage(name, numbers, await loadLogo(), await loadPrizePics(), phone, await loadFondo());
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     const slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     shareFile = new File([blob], `bono-${slug || 'alumno'}.png`, { type: 'image/png' });
@@ -727,6 +808,20 @@ async function openShare(name, numbers, phone = '') {
     shareUrl = URL.createObjectURL(blob);
     $('share-img').src = shareUrl;
     $('share-title').textContent = 'Imagen de ' + name;
+
+    // Avisa qué datos todavía no se cargaron, para que no pasen desapercibidos en la imagen
+    const faltan = [];
+    const named = state.prizes.filter((p) => p.name.trim());
+    if (!state.ad.drawDate.trim()) faltan.push('la fecha del sorteo');
+    if (!state.ad.promo.trim()) faltan.push('la promoción (si hay)');
+    if (!(phone || '').trim() && !state.ad.contact.trim()) faltan.push('el teléfono del alumno');
+    if (named.some((p) => !(p.desc || '').trim())) faltan.push('la descripción de los premios');
+    const sinFoto = named.filter((p) => !state.prizeImages[p.id]).map((p) => p.name.trim());
+    if (sinFoto.length) faltan.push('la foto de ' + sinFoto.join(', '));
+    $('share-note').hidden = !faltan.length;
+    $('share-note').textContent = faltan.length
+      ? `Todavía falta cargar: ${faltan.join(', ')}. Se completa en "Datos para la publicidad" y en "Premios"; después volvé a abrir esta imagen.`
+      : '';
     $('share-send').hidden = !(navigator.canShare && navigator.canShare({ files: [shareFile] }));
     if (!$('share').open) $('share').showModal();
   } catch (err) {
@@ -901,7 +996,7 @@ function saveConfig() {
 const isEditing = (node) => node.contains(document.activeElement);
 
 // Campos de "Datos para la publicidad": clave en state.ad -> id del campo
-const AD_FIELDS = { title: 'ad-title', contact: 'ad-contact', draw: 'ad-draw', promo: 'ad-promo', about: 'ad-about' };
+const AD_FIELDS = { contact: 'ad-contact', drawDate: 'ad-date', drawNote: 'ad-note', promo: 'ad-promo', about: 'ad-about' };
 
 function applyConfig(data) {
   state.goal = (data && data.goal) || 0;
