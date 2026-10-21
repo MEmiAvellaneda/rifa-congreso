@@ -115,6 +115,14 @@ function scheduleRender() {
   requestAnimationFrame(() => { renderQueued = false; renderAll(); });
 }
 
+// Al girar el celular cambia el ancho: se redibujan los gráficos a la medida nueva
+let lastWidth = window.innerWidth;
+window.addEventListener('resize', () => {
+  if (window.innerWidth === lastWidth) return; // el teclado del celular cambia solo el alto
+  lastWidth = window.innerWidth;
+  scheduleRender();
+});
+
 /* ---------- Comprobantes (Firestore) ---------- */
 
 const putProof = (id, data) => setDoc(doc(db, 'proofs', id), { data });
@@ -257,7 +265,9 @@ function renderLineChart() {
   const sold = cumulative(soldPerDay);
   const paid = cumulative(paidPerDay);
 
-  const W = 640, H = 260, L = 64, R = 16, T = 34, B = 34;
+  // El gráfico toma el ancho disponible (en el celular, menos que en la compu)
+  const W = Math.max(300, Math.min(640, box.clientWidth || 640));
+  const H = 260, L = W < 480 ? 56 : 64, R = 16, T = 34, B = 34;
   const yMax = Math.max(sold[days - 1], state.goal, 1);
   const x = (i) => L + (days === 1 ? 0 : i / (days - 1) * (W - L - R));
   const y = (v) => T + (1 - v / yMax) * (H - T - B);
@@ -301,7 +311,10 @@ function renderBarChart() {
   if (!rows.length) return void (box.textContent = 'Todavía no hay alumnos.');
   rows.sort((a, b) => (b.collected + b.pending) - (a.collected + a.pending));
 
-  const W = 640, L = 150, R = 90, ROW = 28, T = 30;
+  const W = Math.max(300, Math.min(640, box.clientWidth || 640));
+  const narrow = W < 480;
+  const L = narrow ? 92 : 150, R = narrow ? 104 : 90, ROW = 28, T = 30;
+  const maxName = narrow ? 12 : 20;
   const H = T + rows.length * ROW + 8;
   const max = Math.max(...rows.map((r) => r.collected + r.pending), 1);
   const scale = (v) => v / max * (W - L - R);
@@ -313,7 +326,7 @@ function renderBarChart() {
   });
   rows.forEach((r, i) => {
     const yy = T + i * ROW;
-    const name = r.name.length > 20 ? r.name.slice(0, 19) + '…' : r.name;
+    const name = r.name.length > maxName ? r.name.slice(0, maxName - 1) + '…' : r.name;
     svg.append(svgEl('text', { x: L - 8, y: yy + 16, 'text-anchor': 'end', 'font-size': 12, fill: '#374151' }, name));
     svg.append(svgEl('rect', { x: L, y: yy + 3, width: scale(r.collected), height: 18, fill: COLOR_PAID }));
     svg.append(svgEl('rect', { x: L + scale(r.collected), y: yy + 3, width: scale(r.pending), height: 18, fill: COLOR_PENDING }));
@@ -687,8 +700,14 @@ function renderTable() {
   for (const num of rows.slice(0, MAX_ROWS)) {
     const s = state.sales[num];
     const tr = el('tr');
-    [num, s.buyer, s.phone || '', studentName(s.studentId), fmtDate(s.ts)].forEach((v) => tr.append(el('td', {}, v)));
+    // data-label: en el celular cada fila se muestra como una tarjeta con su título
+    [num, s.buyer, s.phone || '', studentName(s.studentId), fmtDate(s.ts)].forEach((v, i) => {
+      const td = el('td', {}, v);
+      td.dataset.label = ['Número', 'Comprador/a', 'Contacto', 'Vendedor/a', 'Fecha'][i];
+      tr.append(td);
+    });
     const tdState = el('td');
+    tdState.dataset.label = 'Estado';
     tdState.append(el('span', { className: 'badge ' + (s.paid ? 'paid' : 'pending') }, s.paid ? 'Pagado' : 'Sin pagar'));
     const tdAct = el('td');
     const view = el('button', { type: 'button' }, 'Ver');

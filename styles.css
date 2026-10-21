@@ -190,3 +190,65 @@ body.locked main { display: none; }
 .gate[hidden] { display: none; }
 .gate-box { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 420px; width: 100%; text-align: center; }
 .gate-box h2 { margin-top: 0; }
+
+/* ---- Celular ---- */
+html { -webkit-text-size-adjust: 100%; }
+/* Sin esto, un hijo ancho (como un gráfico) agranda toda la página en vez de scrollear solo */
+main { grid-template-columns: minmax(0, 1fr); }
+.card { min-width: 0; }
+.chart svg { min-width: 0; }
+button, .cell, .chip { touch-action: manipulation; }
+
+@media (max-width: 600px) {
+  main { padding: 12px; gap: 12px; }
+  .hero { padding: 20px 12px; }
+  .hero h1 { font-size: 1.4rem; }
+  .card { padding: 14px; }
+
+  /* 16px evita que el iPhone haga zoom al tocar un campo; 44px es un blanco cómodo para el dedo */
+  input[type=text], input[type=number], input[type=search], select { font-size: 16px; padding: 11px 10px; }
+  button { min-height: 44px; }
+  .userbar button { min-height: 0; }
+  label.check { min-height: 44px; }
+  label.check input { width: 22px; height: 22px; }
+
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .settings { flex-direction: column; gap: 0; }
+  label.inline { justify-content: space-between; }
+  label.inline input { width: 150px; }
+
+  .btn-row button { flex: 1 1 auto; }
+  .row-form { grid-template-columns: 1fr; }
+  .row-form button { margin-bottom: 0; }
+
+  .student-cards { grid-template-columns: 1fr; }
+  .chip { padding: 10px 12px; font-size: .95rem; min-width: 56px; text-align: center; }
+
+  .prize-row { grid-template-columns: 28px 1fr 96px; }
+  .prize-row button { grid-column: 2 / -1; }
+
+  /* Grilla: 5 columnas de 20 filas, números grandes y fáciles de tocar */
+  .grid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .cell { font-size: .95rem; padding: 0; min-height: 44px; }
+  .grid-controls select { flex: 1; min-width: 0; }
+  .q-input { width: 100% !important; flex: 1 1 100%; }
+  .legend { font-size: .78rem; }
+
+  .list-controls { flex-direction: column; }
+  .list-controls select { width: 100%; margin: 0; }
+
+  /* Tabla de ventas: cada fila pasa a ser una tarjeta */
+  .table-wrap { overflow: visible; }
+  table, tbody, tr, td { display: block; }
+  thead { display: none; }
+  tr { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+  td { display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 0; padding: 5px 0; white-space: normal; text-align: right; }
+  td[data-label]::before { content: attr(data-label); color: var(--muted); font-weight: 600; text-align: left; }
+  td:first-child { font-weight: 700; font-size: 1.05rem; }
+  td:first-child::before { font-size: .9rem; font-weight: 600; }
+  .stat:last-child { grid-column: 1 / -1; }
+  td:last-child { justify-content: flex-end; padding-top: 8px; }
+  td button { padding: 0 16px; font-size: .9rem; }
+
+  dialog { width: calc(100% - 24px); max-height: 90vh; overflow-y: auto; padding: 16px; }
+}
