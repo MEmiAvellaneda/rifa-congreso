@@ -8,9 +8,12 @@
 </head>
 <body>
   <header class="hero">
-    <h1>Rifa solidaria</h1>
-    <p>Para ayudar a financiar nuestro viaje al congreso en Europa. Números del 0000 al 9999.</p>
-    <p id="userbar" class="userbar" hidden><span id="user-email"></span> · <button type="button" id="btn-logout">Salir</button></p>
+    <img src="logo.png" class="logo" alt="40 años - Ingeniería en Sistemas de Información - UTN FRT" onerror="this.hidden = true">
+    <div>
+      <h1>Rifa solidaria</h1>
+      <p>Para ayudar a financiar nuestro viaje al congreso en Europa. Números del 0000 al 9999.</p>
+      <p id="userbar" class="userbar" hidden><span id="user-email"></span> · <button type="button" id="btn-logout">Salir</button></p>
+    </div>
   </header>
 
   <main>
@@ -19,12 +22,9 @@
       <h2 id="t-resumen">Resumen</h2>
       <div class="stats">
         <div class="stat"><span id="st-vendidos">0</span><small>Vendidos</small></div>
-        <div class="stat"><span id="st-pagados">0</span><small>Pagados</small></div>
-        <div class="stat"><span id="st-pendientes">0</span><small>Pago pendiente</small></div>
         <div class="stat"><span id="st-asignados">0</span><small>Asignados sin vender</small></div>
         <div class="stat"><span id="st-libres">10000</span><small>Sin asignar</small></div>
-        <div class="stat"><span id="st-cobrado">$0</span><small>Cobrado</small></div>
-        <div class="stat"><span id="st-porcobrar">$0</span><small>Por cobrar</small></div>
+        <div class="stat"><span id="st-cobrado">$0</span><small>Recaudado</small></div>
       </div>
 
       <div class="bar-label"><span>Números vendidos</span><span id="lbl-sold"></span></div>
@@ -65,7 +65,7 @@
         <button type="submit" class="primary">Agregar y asignar al azar</button>
       </form>
       <p id="student-msg" class="msg" role="status"></p>
-      <p class="hint">Cada alumno puede pedir más números cuando vendió todos los que tenía. Verde: vendido y pagado · Amarillo: vendido sin pagar · Gris: falta vender.</p>
+      <p class="hint">Cada alumno puede pedir más números cuando vendió todos los que tenía. Verde: vendido (con comprobante) · Gris: falta vender.</p>
       <div id="students-grid" class="student-cards"></div>
       <div class="btn-row top-gap">
         <button type="button" id="btn-assign-csv">Exportar asignaciones (CSV)</button>
@@ -133,8 +133,7 @@
       <div class="legend">
         <i class="dot free"></i>Sin asignar
         <i class="dot assigned"></i>Asignado
-        <i class="dot pending"></i>Vendido sin pagar
-        <i class="dot paid"></i>Vendido y pagado
+        <i class="dot sold"></i>Vendido
       </div>
       <div id="grid" class="grid"></div>
     </section>
@@ -144,16 +143,11 @@
       <h2 id="t-lista">Ventas registradas</h2>
       <div class="list-controls">
         <input type="search" id="filter" placeholder="Filtrar por número, comprador o alumno">
-        <select id="filter-state" aria-label="Estado de pago">
-          <option value="all">Todos</option>
-          <option value="paid">Pagados</option>
-          <option value="pending">Sin pagar</option>
-        </select>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Número</th><th>Comprador/a</th><th>Contacto</th><th>Vendedor/a</th><th>Fecha</th><th>Estado</th><th></th></tr>
+            <tr><th>Número</th><th>Comprador/a</th><th>Contacto</th><th>Vendedor/a</th><th>Fecha</th><th>Comprobante</th><th></th></tr>
           </thead>
           <tbody id="sales-body"></tbody>
         </table>
@@ -182,6 +176,18 @@
     <div class="btn-row">
       <button type="button" id="d-delete" class="danger">Eliminar venta</button>
       <button type="button" id="d-close">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Imagen para compartir -->
+  <dialog id="share">
+    <h3 id="share-title"></h3>
+    <p class="hint">Se arma con los números actuales del alumno. Los vendidos salen tachados.</p>
+    <img id="share-img" alt="Imagen con los números del alumno">
+    <div class="btn-row">
+      <button type="button" id="share-send" class="primary" hidden>Compartir</button>
+      <button type="button" id="share-download">Descargar imagen</button>
+      <button type="button" id="share-close">Cerrar</button>
     </div>
   </dialog>
 

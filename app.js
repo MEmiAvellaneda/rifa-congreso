@@ -2,7 +2,7 @@
 // Los datos viven en Firebase (Firestore) y se comparten en tiempo real:
 //   config/main      { price, goal, prizes: [{ id, name, winner }] }
 //   students/{id}    { name, numbers: ["0042", ...] }
-//   sales/{número}   { buyer, phone, studentId|null, paid, proofId, ts, paidAt, price, by }
+//   sales/{número}   { buyer, phone, studentId|null, proofId, ts, price, by }
 //   proofs/{id}      { data: "data:image/jpeg;base64,..." }
 // `state` es una copia local que se mantiene al día con onSnapshot.
 
@@ -97,13 +97,10 @@ const studentName = (id) => (id && state.students[id] ? state.students[id].name 
 function statsFor(id) {
   const numbers = id ? state.students[id].numbers : [];
   const sales = Object.values(state.sales).filter((s) => (s.studentId || null) === id);
-  const paid = sales.filter((s) => s.paid);
   return {
     assigned: numbers.length,
     sold: sales.length,
-    paid: paid.length,
-    collected: paid.reduce((t, s) => t + s.price, 0),
-    pending: sales.filter((s) => !s.paid).reduce((t, s) => t + s.price, 0),
+    collected: sales.reduce((t, s) => t + s.price, 0),
   };
 }
 
@@ -201,25 +198,22 @@ $('student-form').addEventListener('submit', async (e) => {
   }
   $('s-name').value = '';
   setMsg(msg, `${name}: ${count} números asignados.`, 'ok');
+  openShare(name, result.numbers);
 });
 
 /* ---------- Render: resumen ---------- */
 
 function renderStats() {
   const sales = Object.values(state.sales);
-  const paid = sales.filter((s) => s.paid);
-  const collected = paid.reduce((t, s) => t + s.price, 0);
+  const collected = sales.reduce((t, s) => t + s.price, 0);
   const owner = ownerMap();
   const assignedUnsold = Object.keys(owner).filter((n) => !state.sales[n]).length;
   const used = new Set([...Object.keys(owner), ...Object.keys(state.sales)]);
 
   $('st-vendidos').textContent = sales.length;
-  $('st-pagados').textContent = paid.length;
-  $('st-pendientes').textContent = sales.length - paid.length;
   $('st-asignados').textContent = assignedUnsold;
   $('st-libres').textContent = TOTAL - used.size;
   $('st-cobrado').textContent = money(collected);
-  $('st-porcobrar').textContent = money(sales.filter((s) => !s.paid).reduce((t, s) => t + s.price, 0));
 
   $('bar-sold').style.width = (sales.length / TOTAL * 100) + '%';
   $('lbl-sold').textContent = `${sales.length} de ${TOTAL}`;
@@ -240,9 +234,7 @@ function svgEl(tag, attrs = {}, text) {
   return node;
 }
 
-const COLOR_SOLD = '#2f5bea';
 const COLOR_PAID = '#16a34a';
-const COLOR_PENDING = '#f59e0b';
 const COLOR_GOAL = '#dc2626';
 const COLOR_AXIS = '#94a3b8';
 
@@ -254,25 +246,19 @@ function renderLineChart() {
 
   const start = startOfDay(Math.min(...sales.map((s) => s.ts)));
   const days = Math.min(366, Math.round((startOfDay(Date.now()) - start) / DAY) + 1);
-  const soldPerDay = new Array(days).fill(0);
-  const paidPerDay = new Array(days).fill(0);
+  const perDay = new Array(days).fill(0);
   const dayIndex = (t) => Math.max(0, Math.min(days - 1, Math.round((startOfDay(t) - start) / DAY)));
-  for (const s of sales) {
-    soldPerDay[dayIndex(s.ts)] += s.price;
-    if (s.paid) paidPerDay[dayIndex(s.paidAt || s.ts)] += s.price;
-  }
-  const cumulative = (arr) => arr.reduce((acc, v, i) => (acc.push((acc[i - 1] || 0) + v), acc), []);
-  const sold = cumulative(soldPerDay);
-  const paid = cumulative(paidPerDay);
+  for (const s of sales) perDay[dayIndex(s.ts)] += s.price;
+  const total = perDay.reduce((acc, v, i) => (acc.push((acc[i - 1] || 0) + v), acc), []);
 
   // El gráfico toma el ancho disponible (en el celular, menos que en la compu)
   const W = Math.max(300, Math.min(640, box.clientWidth || 640));
   const H = 260, L = W < 480 ? 56 : 64, R = 16, T = 34, B = 34;
-  const yMax = Math.max(sold[days - 1], state.goal, 1);
+  const yMax = Math.max(total[days - 1], state.goal, 1);
   const x = (i) => L + (days === 1 ? 0 : i / (days - 1) * (W - L - R));
   const y = (v) => T + (1 - v / yMax) * (H - T - B);
 
-  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Evolución acumulada de ventas y cobros' });
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Evolución acumulada de la recaudación' });
   for (let i = 0; i <= 4; i++) {
     const v = yMax * i / 4;
     svg.append(svgEl('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: '#e5e7eb' }));
@@ -290,10 +276,9 @@ function renderLineChart() {
     svg.append(svgEl('polyline', { points, fill: 'none', stroke: color, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
     if (days <= 31) values.forEach((v, i) => svg.append(svgEl('circle', { cx: x(i), cy: y(v), r: 3, fill: color })));
   };
-  drawSeries(sold, COLOR_SOLD);
-  drawSeries(paid, COLOR_PAID);
+  drawSeries(total, COLOR_PAID);
 
-  const legend = [['Vendido', COLOR_SOLD], ['Cobrado', COLOR_PAID]];
+  const legend = [['Recaudado', COLOR_PAID]];
   if (state.goal > 0) legend.push(['Meta', COLOR_GOAL]);
   legend.forEach(([label, color], i) => {
     svg.append(svgEl('rect', { x: L + i * 90, y: 8, width: 12, height: 12, rx: 3, fill: color }));
@@ -309,29 +294,24 @@ function renderBarChart() {
   const direct = statsFor(null);
   if (direct.sold) rows.push({ name: 'Venta directa', ...direct });
   if (!rows.length) return void (box.textContent = 'Todavía no hay alumnos.');
-  rows.sort((a, b) => (b.collected + b.pending) - (a.collected + a.pending));
+  rows.sort((a, b) => b.collected - a.collected);
 
   const W = Math.max(300, Math.min(640, box.clientWidth || 640));
   const narrow = W < 480;
-  const L = narrow ? 92 : 150, R = narrow ? 104 : 90, ROW = 28, T = 30;
+  const L = narrow ? 92 : 150, R = narrow ? 104 : 90, ROW = 28, T = 8;
   const maxName = narrow ? 12 : 20;
   const H = T + rows.length * ROW + 8;
-  const max = Math.max(...rows.map((r) => r.collected + r.pending), 1);
+  const max = Math.max(...rows.map((r) => r.collected), 1);
   const scale = (v) => v / max * (W - L - R);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Recaudación por alumno' });
-  [['Cobrado', COLOR_PAID], ['Por cobrar', COLOR_PENDING]].forEach(([label, color], i) => {
-    svg.append(svgEl('rect', { x: L + i * 100, y: 6, width: 12, height: 12, rx: 3, fill: color }));
-    svg.append(svgEl('text', { x: L + i * 100 + 18, y: 16, 'font-size': 12, fill: '#374151' }, label));
-  });
   rows.forEach((r, i) => {
     const yy = T + i * ROW;
     const name = r.name.length > maxName ? r.name.slice(0, maxName - 1) + '…' : r.name;
     svg.append(svgEl('text', { x: L - 8, y: yy + 16, 'text-anchor': 'end', 'font-size': 12, fill: '#374151' }, name));
     svg.append(svgEl('rect', { x: L, y: yy + 3, width: scale(r.collected), height: 18, fill: COLOR_PAID }));
-    svg.append(svgEl('rect', { x: L + scale(r.collected), y: yy + 3, width: scale(r.pending), height: 18, fill: COLOR_PENDING }));
-    svg.append(svgEl('text', { x: L + scale(r.collected + r.pending) + 6, y: yy + 16, 'font-size': 12, fill: '#374151' },
-      `${money(r.collected + r.pending)} · ${r.sold}/${r.assigned || r.sold}`));
+    svg.append(svgEl('text', { x: L + scale(r.collected) + 6, y: yy + 16, 'font-size': 12, fill: '#374151' },
+      `${money(r.collected)} · ${r.sold}/${r.assigned || r.sold}`));
   });
   box.append(svg);
 }
@@ -353,7 +333,7 @@ function renderStudents() {
     const card = el('article', { className: 'student-card' });
     card.append(el('h3', {}, s.name));
     card.append(el('p', { className: 'hint' },
-      `${st.sold} de ${st.assigned} vendidos · ${st.paid} pagados · cobrado ${money(st.collected)}`));
+      `${st.sold} de ${st.assigned} vendidos · recaudado ${money(st.collected)}`));
     const bar = el('div', { className: 'progress' });
     const fill = el('div', { className: 'fill goal' });
     fill.style.width = (st.assigned ? st.sold / st.assigned * 100 : 0) + '%';
@@ -363,8 +343,8 @@ function renderStudents() {
     const chips = el('div', { className: 'chips' });
     for (const n of s.numbers) {
       const sale = state.sales[n];
-      const chip = el('span', { className: 'chip ' + (sale ? (sale.paid ? 'paid' : 'pending') : '') }, n);
-      chip.title = sale ? `${sale.buyer} · ${sale.paid ? 'pagado' : 'sin pagar'}` : 'Falta vender';
+      const chip = el('span', { className: 'chip ' + (sale ? 'sold' : '') }, n);
+      chip.title = sale ? `Vendido a ${sale.buyer}` : 'Falta vender';
       chips.append(chip);
     }
     card.append(chips);
@@ -375,11 +355,13 @@ function renderStudents() {
     const actions = el('div', { className: 'btn-row' });
     const more = el('button', { type: 'button', className: left ? 'muted' : 'primary' }, 'Pedir más números');
     more.dataset.act = 'more';
+    const image = el('button', { type: 'button' }, 'Imagen para compartir');
+    image.dataset.act = 'image';
     const copy = el('button', { type: 'button' }, 'Copiar lista');
     copy.dataset.act = 'copy';
     const del = el('button', { type: 'button', className: 'danger' }, 'Eliminar');
     del.dataset.act = 'delete';
-    for (const b of [more, copy, del]) { b.dataset.id = id; actions.append(b); }
+    for (const b of [more, image, copy, del]) { b.dataset.id = id; actions.append(b); }
     card.append(actions);
     box.append(card);
   }
@@ -401,12 +383,16 @@ $('students-grid').addEventListener('click', async (e) => {
     if (!Number.isInteger(count) || count < 1) return say('Cantidad inválida.', 'error');
     const result = pickRandom(count);
     if (result.error) return say(result.error, 'error');
+    const all = [...s.numbers, ...result.numbers].sort();
     try {
-      await setDoc(doc(db, 'students', id), { numbers: [...s.numbers, ...result.numbers].sort() }, { merge: true });
+      await setDoc(doc(db, 'students', id), { numbers: all }, { merge: true });
       cardMsg[id] = { text: `Se asignaron ${count} números nuevos.`, kind: 'ok' };
     } catch (err) {
-      showError(err);
+      return showError(err);
     }
+    openShare(s.name, all); // la imagen se rehace con los números nuevos incluidos
+  } else if (btn.dataset.act === 'image') {
+    openShare(s.name, s.numbers);
   } else if (btn.dataset.act === 'copy') {
     const free = s.numbers.filter((n) => !state.sales[n]);
     const text = `${s.name} - números para vender: ${free.join(', ')}`;
@@ -423,6 +409,174 @@ $('students-grid').addEventListener('click', async (e) => {
     deleteDoc(doc(db, 'students', id)).catch(showError);
   }
 });
+
+/* ---------- Imagen para compartir ---------- */
+// Se dibuja en un <canvas> con los números del alumno; los ya vendidos salen tachados.
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+// Achica la letra hasta que el texto entre en el ancho disponible
+function fitText(ctx, text, x, y, maxWidth, size, weight = 'bold') {
+  let px = size;
+  ctx.font = `${weight} ${px}px ${FONT}`;
+  while (ctx.measureText(text).width > maxWidth && px > 20) {
+    px -= 2;
+    ctx.font = `${weight} ${px}px ${FONT}`;
+  }
+  ctx.fillText(text, x, y);
+}
+
+// El logo es opcional: si logo.png no está en la carpeta, la imagen se arma igual sin él.
+let logoPromise;
+function loadLogo() {
+  logoPromise ||= new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = 'logo.png';
+  });
+  return logoPromise;
+}
+
+const INK = '#18181b';
+const ACCENT = '#ea580c';
+
+function drawShareImage(name, numbers, logo) {
+  const W = 1080, COLS = 5, CELL_W = 176, CELL_H = 84, GAP = 16;
+  const padX = (W - (COLS * CELL_W + (COLS - 1) * GAP)) / 2;
+
+  // Medidas verticales: el logo (si hay) ocupa arriba; después título y una franja oscura con los premios
+  const LOGO_MAX_H = 200, LOGO_MAX_W = 620;
+  const logoH = logo ? Math.min(LOGO_MAX_H, LOGO_MAX_W * logo.height / logo.width) : 0;
+  const logoW = logo ? logoH * logo.width / logo.height : 0;
+  const top = logo ? 36 + logoH + 30 : 40;
+  const titleY = top + 96;
+  const subtitleY = titleY + 62;
+  const bandTop = subtitleY + 44;
+  const BAND_H = 160;
+  const HEADER_H = bandTop + BAND_H;
+  const TITLE_H = 190, FOOTER_H = 190;
+  const rows = Math.ceil(numbers.length / COLS);
+  const gridTop = HEADER_H + TITLE_H;
+  const H = Math.max(1080, gridTop + rows * (CELL_H + GAP) + FOOTER_H);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+
+  ctx.fillStyle = '#f5f4f2';
+  ctx.fillRect(0, 0, W, H);
+
+  // Cabecera blanca con el logo y el título
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, bandTop);
+  ctx.fillStyle = ACCENT;
+  ctx.fillRect(0, 0, W, 14);
+  if (logo) ctx.drawImage(logo, (W - logoW) / 2, 36, logoW, logoH);
+  ctx.fillStyle = INK;
+  fitText(ctx, 'RIFA SOLIDARIA', W / 2, titleY, W - 120, 96);
+  ctx.fillStyle = '#6b7280';
+  fitText(ctx, 'Viaje al congreso en Europa', W / 2, subtitleY, W - 120, 44, 'normal');
+
+  // Franja oscura con premios y precio
+  ctx.fillStyle = INK;
+  ctx.fillRect(0, bandTop, W, BAND_H);
+  ctx.fillStyle = ACCENT;
+  ctx.fillRect(0, bandTop, W, 8);
+  ctx.fillStyle = '#fff';
+  const prizes = state.prizes.map((p) => p.name.trim()).filter(Boolean);
+  if (prizes.length) {
+    fitText(ctx, `${prizes.length > 1 ? 'Premios' : 'Premio'}: ${prizes.join(' · ')}`, W / 2, bandTop + 78, W - 120, 56);
+  }
+  const info = [];
+  if (state.price > 0) info.push(`Cada número: ${money(state.price)}`);
+  info.push('Sorteo por la Quiniela');
+  ctx.fillStyle = '#fdba74';
+  fitText(ctx, info.join('  ·  '), W / 2, bandTop + 130, W - 120, 38, 'normal');
+
+  ctx.fillStyle = '#6b7280';
+  fitText(ctx, 'Números de', W / 2, HEADER_H + 70, W - 120, 36, 'normal');
+  ctx.fillStyle = INK;
+  fitText(ctx, name, W / 2, HEADER_H + 140, W - 120, 68);
+
+  numbers.forEach((n, i) => {
+    const x = padX + (i % COLS) * (CELL_W + GAP);
+    const y = gridTop + Math.floor(i / COLS) * (CELL_H + GAP);
+    const sold = Boolean(state.sales[n]);
+    roundRectPath(ctx, x, y, CELL_W, CELL_H, 16);
+    ctx.fillStyle = sold ? '#e7e5e4' : '#fff';
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = sold ? '#d6d3d1' : INK;
+    ctx.stroke();
+    ctx.fillStyle = sold ? '#a8a29e' : INK;
+    ctx.font = `bold 46px ${FONT}`;
+    ctx.fillText(n, x + CELL_W / 2, y + CELL_H / 2 + 16);
+    if (sold) {
+      ctx.strokeStyle = '#a8a29e';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(x + 22, y + CELL_H / 2 + 2);
+      ctx.lineTo(x + CELL_W - 22, y + CELL_H / 2 + 2);
+      ctx.stroke();
+    }
+  });
+
+  const available = numbers.filter((n) => !state.sales[n]).length;
+  ctx.fillStyle = ACCENT;
+  fitText(ctx, `Disponibles: ${available} de ${numbers.length}`, W / 2, H - 105, W - 120, 48);
+  ctx.fillStyle = '#6b7280';
+  fitText(ctx, `Pedile tu número a ${name}`, W / 2, H - 45, W - 120, 36, 'normal');
+  return canvas;
+}
+
+let shareFile = null;
+let shareUrl = null;
+
+async function openShare(name, numbers) {
+  try {
+    const canvas = drawShareImage(name, numbers, await loadLogo());
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    shareFile = new File([blob], `rifa-${slug || 'alumno'}.png`, { type: 'image/png' });
+    if (shareUrl) URL.revokeObjectURL(shareUrl);
+    shareUrl = URL.createObjectURL(blob);
+    $('share-img').src = shareUrl;
+    $('share-title').textContent = 'Imagen de ' + name;
+    $('share-send').hidden = !(navigator.canShare && navigator.canShare({ files: [shareFile] }));
+    if (!$('share').open) $('share').showModal();
+  } catch (err) {
+    showError(err);
+  }
+}
+
+$('share-send').addEventListener('click', async () => {
+  try {
+    await navigator.share({ files: [shareFile], title: 'Rifa solidaria' });
+  } catch (err) {
+    if (err.name !== 'AbortError') showError(err); // cancelar el menú de compartir no es un error
+  }
+});
+$('share-download').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = shareUrl;
+  a.download = shareFile.name;
+  a.click();
+});
+$('share-close').addEventListener('click', () => $('share').close());
 
 $('btn-assign-csv').addEventListener('click', () => {
   const lines = ['Alumno,Numero,Estado'];
@@ -542,10 +696,8 @@ $('sale-form').addEventListener('submit', async (e) => {
         buyer,
         phone: $('f-phone').value.trim(),
         studentId: id,
-        paid: true,
         proofId,
         ts: now,
-        paidAt: now,
         price: state.price,
         by: auth.currentUser.email,
       }));
@@ -649,7 +801,7 @@ function renderGrid() {
     const sale = state.sales[num];
     const btn = el('button', { type: 'button', className: 'cell' }, num);
     btn.dataset.num = num;
-    if (sale) btn.classList.add(sale.paid ? 'paid' : 'pending');
+    if (sale) btn.classList.add('sold');
     else if (owner[num]) btn.classList.add('assigned');
     btn.title = sale ? sale.buyer + ' · ' + studentName(sale.studentId)
       : owner[num] ? 'Asignado a ' + studentName(owner[num]) : 'Sin asignar';
@@ -687,11 +839,8 @@ $('q-number').addEventListener('input', () => {
 
 function renderTable() {
   const text = $('filter').value.trim().toLowerCase();
-  const stateFilter = $('filter-state').value;
   const rows = Object.keys(state.sales).sort().filter((num) => {
     const s = state.sales[num];
-    if (stateFilter === 'paid' && !s.paid) return false;
-    if (stateFilter === 'pending' && s.paid) return false;
     return !text || [num, s.buyer, studentName(s.studentId)].join(' ').toLowerCase().includes(text);
   });
 
@@ -707,8 +856,8 @@ function renderTable() {
       tr.append(td);
     });
     const tdState = el('td');
-    tdState.dataset.label = 'Estado';
-    tdState.append(el('span', { className: 'badge ' + (s.paid ? 'paid' : 'pending') }, s.paid ? 'Pagado' : 'Sin pagar'));
+    tdState.dataset.label = 'Comprobante';
+    tdState.append(el('span', { className: 'badge ' + (s.proofId ? 'paid' : 'pending') }, s.proofId ? 'Con comprobante' : 'Sin comprobante'));
     const tdAct = el('td');
     const view = el('button', { type: 'button' }, 'Ver');
     view.dataset.num = num;
@@ -722,7 +871,6 @@ function renderTable() {
 }
 
 $('filter').addEventListener('input', renderTable);
-$('filter-state').addEventListener('change', renderTable);
 $('sales-body').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-num]');
   if (btn) openDetail(btn.dataset.num);
