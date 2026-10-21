@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rifa - Viaje al Congreso en Europa</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <h1>Rifa solidaria</h1>
+    <p>Para ayudar a financiar nuestro viaje al congreso en Europa. Números del 0000 al 9999.</p>
+    <p id="userbar" class="userbar" hidden><span id="user-email"></span> · <button type="button" id="btn-logout">Salir</button></p>
+  </header>
+
+  <main>
+    <!-- Resumen -->
+    <section class="card" aria-labelledby="t-resumen">
+      <h2 id="t-resumen">Resumen</h2>
+      <div class="stats">
+        <div class="stat"><span id="st-vendidos">0</span><small>Vendidos</small></div>
+        <div class="stat"><span id="st-pagados">0</span><small>Pagados</small></div>
+        <div class="stat"><span id="st-pendientes">0</span><small>Pago pendiente</small></div>
+        <div class="stat"><span id="st-asignados">0</span><small>Asignados sin vender</small></div>
+        <div class="stat"><span id="st-libres">10000</span><small>Sin asignar</small></div>
+        <div class="stat"><span id="st-cobrado">$0</span><small>Cobrado</small></div>
+        <div class="stat"><span id="st-porcobrar">$0</span><small>Por cobrar</small></div>
+      </div>
+
+      <div class="bar-label"><span>Números vendidos</span><span id="lbl-sold"></span></div>
+      <div class="progress" aria-hidden="true"><div id="bar-sold" class="fill sold"></div></div>
+      <div class="bar-label"><span>Meta de recaudación</span><span id="lbl-goal"></span></div>
+      <div class="progress" aria-hidden="true"><div id="bar-goal" class="fill goal"></div></div>
+
+      <div class="settings">
+        <label class="inline">Precio por número ($)
+          <input type="number" id="price" min="0" step="1" value="0">
+        </label>
+        <label class="inline">Meta de recaudación ($)
+          <input type="number" id="goal" min="0" step="1" value="0">
+        </label>
+      </div>
+      <small class="hint">Cambiar el precio no modifica ventas ya registradas.</small>
+    </section>
+
+    <!-- Gráficos -->
+    <section class="card" aria-labelledby="t-graficos">
+      <h2 id="t-graficos">Gráficos de recaudación</h2>
+      <h3>Evolución acumulada</h3>
+      <div id="chart-line" class="chart"></div>
+      <h3>Por alumno</h3>
+      <div id="chart-bars" class="chart"></div>
+    </section>
+
+    <!-- Alumnos -->
+    <section class="card" aria-labelledby="t-alumnos">
+      <h2 id="t-alumnos">Alumnos y números asignados</h2>
+      <form id="student-form" class="row-form" autocomplete="off">
+        <label>Nombre del alumno/a
+          <input type="text" id="s-name" required>
+        </label>
+        <label>Cantidad de números (mín. 10)
+          <input type="number" id="s-count" min="10" max="1000" value="10" required>
+        </label>
+        <button type="submit" class="primary">Agregar y asignar al azar</button>
+      </form>
+      <p id="student-msg" class="msg" role="status"></p>
+      <p class="hint">Cada alumno puede pedir más números cuando vendió todos los que tenía. Verde: vendido y pagado · Amarillo: vendido sin pagar · Gris: falta vender.</p>
+      <div id="students-grid" class="student-cards"></div>
+      <div class="btn-row top-gap">
+        <button type="button" id="btn-assign-csv">Exportar asignaciones (CSV)</button>
+      </div>
+    </section>
+
+    <!-- Registrar venta -->
+    <section class="card" aria-labelledby="t-venta">
+      <h2 id="t-venta">Registrar venta</h2>
+      <form id="sale-form" autocomplete="off">
+        <label>¿Quién vendió?
+          <input type="text" id="f-student" list="students-list" placeholder="Escribí el nombre del alumno" required>
+          <small id="seller-hint" class="hint"></small>
+        </label>
+        <datalist id="students-list"></datalist>
+
+        <div id="chips-wrap" hidden>
+          <label>Filtrar por número
+            <input type="text" id="f-filter" inputmode="numeric" maxlength="4" placeholder="Ej: 12 (muestra los que contienen 12)">
+          </label>
+          <span class="label-text">Números disponibles de este alumno: tocá los que vendió</span>
+          <p id="f-count" class="hint"></p>
+          <div id="f-chips" class="chips"></div>
+        </div>
+        <label id="direct-wrap" hidden>Número(s)
+          <input type="text" id="f-numbers" placeholder="Ej: 0042, 0100-0105">
+          <small class="hint">Solo números que no estén asignados a ningún alumno.</small>
+        </label>
+
+        <div class="row-form">
+          <label>Nombre de quien compró
+            <input type="text" id="f-buyer" required>
+          </label>
+          <label>Teléfono o contacto
+            <input type="text" id="f-phone">
+          </label>
+        </div>
+        <label>Comprobante de pago (obligatorio)
+          <input type="file" id="f-proof" accept="image/*" required>
+          <small class="hint">Foto o captura de la transferencia o pago. Sin comprobante no se registra la venta.</small>
+        </label>
+        <p id="form-msg" class="msg" role="status"></p>
+        <button type="submit" class="primary">Guardar venta</button>
+      </form>
+    </section>
+
+    <!-- Premios -->
+    <section class="card" aria-labelledby="t-premios">
+      <h2 id="t-premios">Premios y ganadores</h2>
+      <p class="hint">El sorteo se hace por la quiniela. Cargá cada premio y, cuando salga, el número ganador para ver a quién corresponde.</p>
+      <div id="prizes"></div>
+      <button type="button" id="btn-add-prize">Agregar premio</button>
+    </section>
+
+    <!-- Grilla -->
+    <section class="card" aria-labelledby="t-grilla">
+      <h2 id="t-grilla">Grilla de números</h2>
+      <div class="grid-controls">
+        <button type="button" id="blk-prev" aria-label="Bloque anterior">‹</button>
+        <select id="blk-select" aria-label="Bloque de números"></select>
+        <button type="button" id="blk-next" aria-label="Bloque siguiente">›</button>
+        <input type="text" id="q-number" inputmode="numeric" maxlength="4" placeholder="Ir al número" aria-label="Buscar número" class="q-input">
+        <span id="q-result" class="msg"></span>
+      </div>
+      <div class="legend">
+        <i class="dot free"></i>Sin asignar
+        <i class="dot assigned"></i>Asignado
+        <i class="dot pending"></i>Vendido sin pagar
+        <i class="dot paid"></i>Vendido y pagado
+      </div>
+      <div id="grid" class="grid"></div>
+    </section>
+
+    <!-- Lista -->
+    <section class="card" aria-labelledby="t-lista">
+      <h2 id="t-lista">Ventas registradas</h2>
+      <div class="list-controls">
+        <input type="search" id="filter" placeholder="Filtrar por número, comprador o alumno">
+        <select id="filter-state" aria-label="Estado de pago">
+          <option value="all">Todos</option>
+          <option value="paid">Pagados</option>
+          <option value="pending">Sin pagar</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Número</th><th>Comprador/a</th><th>Contacto</th><th>Vendedor/a</th><th>Fecha</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody id="sales-body"></tbody>
+        </table>
+      </div>
+      <p id="list-note" class="hint"></p>
+    </section>
+
+    <!-- Respaldo -->
+    <section class="card" aria-labelledby="t-respaldo">
+      <h2 id="t-respaldo">Copia de seguridad</h2>
+      <div class="btn-row">
+        <button type="button" id="btn-csv">Exportar ventas (CSV)</button>
+        <button type="button" id="btn-backup">Descargar respaldo</button>
+        <button type="button" id="btn-restore">Restaurar respaldo</button>
+        <input type="file" id="file-restore" accept="application/json" hidden>
+      </div>
+      <small class="hint">Los datos se guardan solo en este navegador. Descargá un respaldo seguido.</small>
+    </section>
+  </main>
+
+  <!-- Detalle de venta -->
+  <dialog id="detail">
+    <h3 id="d-title"></h3>
+    <dl id="d-info"></dl>
+    <img id="d-proof" alt="Comprobante de pago" hidden>
+    <div class="btn-row">
+      <button type="button" id="d-delete" class="danger">Eliminar venta</button>
+      <button type="button" id="d-close">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Pantalla de ingreso -->
+  <div id="gate" class="gate">
+    <div class="gate-box">
+      <h2>Rifa solidaria</h2>
+      <p id="gate-msg"></p>
+      <button type="button" id="btn-login" class="primary">Ingresar con Google</button>
+      <button type="button" id="btn-gate-logout" hidden>Salir</button>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
