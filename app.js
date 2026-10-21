@@ -4,6 +4,7 @@
 //   students/{id}    { name, numbers: ["0042", ...] }
 //   sales/{número}   { buyer, phone, studentId|null, proofId, ts, price, by }
 //   proofs/{id}      { data: "data:image/jpeg;base64,..." }
+//   prizeImages/{id} { data: "data:image/jpeg;base64,..." }   (id = el del premio)
 // `state` es una copia local que se mantiene al día con onSnapshot.
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
@@ -26,8 +27,11 @@ const $ = (id) => document.getElementById(id);
 const pad = (n) => String(n).padStart(4, '0');
 const money = (n) => '$' + Math.round(n).toLocaleString('es-AR');
 
-const defaultPrizes = () => [{ id: 'p' + Date.now(), name: 'Computadora', winner: '' }];
-const state = { price: 0, goal: 0, prizes: defaultPrizes(), students: {}, sales: {} };
+const defaultPrizes = () => [
+  { id: 'p' + Date.now(), name: 'Notebook', winner: '' },
+  { id: 'p' + (Date.now() + 1), name: 'Auriculares', winner: '' },
+];
+const state = { price: 0, goal: 0, prizes: defaultPrizes(), students: {}, sales: {}, prizeImages: {} };
 let currentBlock = 0;
 const picked = new Set(); // números tocados en el formulario de venta
 
@@ -448,10 +452,27 @@ function loadLogo() {
   return logoPromise;
 }
 
+// Prepara las fotos de los premios que tienen imagen cargada
+async function loadPrizePics() {
+  const pics = [];
+  for (const prize of state.prizes) {
+    const data = state.prizeImages[prize.id];
+    if (!data) continue;
+    const img = await new Promise((resolve) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => resolve(null);
+      i.src = data;
+    });
+    if (img) pics.push({ name: prize.name.trim() || 'Premio', img });
+  }
+  return pics;
+}
+
 const INK = '#18181b';
 const ACCENT = '#ea580c';
 
-function drawShareImage(name, numbers, logo) {
+function drawShareImage(name, numbers, logo, prizePics = []) {
   const W = 1080, COLS = 5, CELL_W = 176, CELL_H = 84, GAP = 16;
   const padX = (W - (COLS * CELL_W + (COLS - 1) * GAP)) / 2;
 
@@ -462,12 +483,19 @@ function drawShareImage(name, numbers, logo) {
   const top = logo ? 36 + logoH + 30 : 40;
   const titleY = top + 96;
   const subtitleY = titleY + 62;
-  const bandTop = subtitleY + 44;
+  const bandTop = subtitleY + 44 + 108; // el subtítulo ocupa tres renglones
   const BAND_H = 160;
   const HEADER_H = bandTop + BAND_H;
+  // Fotos de los premios (si hay): hasta 3 por fila, cada una en su recuadro con el nombre debajo
+  const PIC_COLS = Math.min(3, Math.max(prizePics.length, 1));
+  const PIC_GAP = 24, PIC_H = 250, PIC_CAPTION = 56;
+  const picW = (W - 2 * padX - (PIC_COLS - 1) * PIC_GAP) / PIC_COLS;
+  const picRows = Math.ceil(prizePics.length / PIC_COLS);
+  const picsH = prizePics.length ? 30 + picRows * (PIC_H + PIC_CAPTION + PIC_GAP) : 0;
+  const contentTop = HEADER_H + picsH;
   const TITLE_H = 190, FOOTER_H = 190;
   const rows = Math.ceil(numbers.length / COLS);
-  const gridTop = HEADER_H + TITLE_H;
+  const gridTop = contentTop + TITLE_H;
   const H = Math.max(1080, gridTop + rows * (CELL_H + GAP) + FOOTER_H);
 
   const canvas = document.createElement('canvas');
@@ -489,7 +517,10 @@ function drawShareImage(name, numbers, logo) {
   ctx.fillStyle = INK;
   fitText(ctx, 'RIFA SOLIDARIA', W / 2, titleY, W - 120, 96);
   ctx.fillStyle = '#6b7280';
-  fitText(ctx, 'Viaje al congreso en Europa', W / 2, subtitleY, W - 120, 44, 'normal');
+  fitText(ctx, 'A beneficio del', W / 2, subtitleY, W - 100, 34, 'normal');
+  ctx.fillStyle = INK;
+  fitText(ctx, 'Viaje Académico y de Inmersión Tecnológica 2027', W / 2, subtitleY + 54, W - 80, 44);
+  fitText(ctx, 'Tech Show London e IBM Quantum Spain', W / 2, subtitleY + 108, W - 80, 44);
 
   // Franja oscura con premios y precio
   ctx.fillStyle = INK;
@@ -507,10 +538,28 @@ function drawShareImage(name, numbers, logo) {
   ctx.fillStyle = '#fdba74';
   fitText(ctx, info.join('  ·  '), W / 2, bandTop + 130, W - 120, 38, 'normal');
 
+  prizePics.forEach(({ name: prizeName, img }, i) => {
+    const col = i % PIC_COLS;
+    const row = Math.floor(i / PIC_COLS);
+    const inRow = Math.min(PIC_COLS, prizePics.length - row * PIC_COLS); // la última fila queda centrada
+    const x = (W - (inRow * picW + (inRow - 1) * PIC_GAP)) / 2 + col * (picW + PIC_GAP);
+    const y = HEADER_H + 30 + row * (PIC_H + PIC_CAPTION + PIC_GAP);
+    roundRectPath(ctx, x, y, picW, PIC_H, 20);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#e4e2dd';
+    ctx.stroke();
+    const k = Math.min((picW - 24) / img.width, (PIC_H - 24) / img.height); // entra entera, sin deformarse
+    ctx.drawImage(img, x + (picW - img.width * k) / 2, y + (PIC_H - img.height * k) / 2, img.width * k, img.height * k);
+    ctx.fillStyle = INK;
+    fitText(ctx, prizeName, x + picW / 2, y + PIC_H + 40, picW - 16, 32);
+  });
+
   ctx.fillStyle = '#6b7280';
-  fitText(ctx, 'Números de', W / 2, HEADER_H + 70, W - 120, 36, 'normal');
+  fitText(ctx, 'Números de', W / 2, contentTop + 70, W - 120, 36, 'normal');
   ctx.fillStyle = INK;
-  fitText(ctx, name, W / 2, HEADER_H + 140, W - 120, 68);
+  fitText(ctx, name, W / 2, contentTop + 140, W - 120, 68);
 
   numbers.forEach((n, i) => {
     const x = padX + (i % COLS) * (CELL_W + GAP);
@@ -548,7 +597,7 @@ let shareUrl = null;
 
 async function openShare(name, numbers) {
   try {
-    const canvas = drawShareImage(name, numbers, await loadLogo());
+    const canvas = drawShareImage(name, numbers, await loadLogo(), await loadPrizePics());
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     const slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     shareFile = new File([blob], `rifa-${slug || 'alumno'}.png`, { type: 'image/png' });
@@ -758,6 +807,34 @@ function renderPrizes() {
     const result = el('span', { className: 'msg' });
     const remove = el('button', { type: 'button', className: 'danger' }, 'Quitar');
 
+    // Foto del premio: se reduce y se guarda aparte, para no engordar el documento de configuración
+    const media = el('div', { className: 'prize-media' });
+    const pic = state.prizeImages[prize.id];
+    if (pic) media.append(el('img', { className: 'prize-thumb', src: pic, alt: 'Foto de ' + (prize.name || 'premio') }));
+    const pick = el('label', { className: 'file-btn' }, pic ? 'Cambiar foto' : 'Agregar foto');
+    const file = el('input', { type: 'file', accept: 'image/*' });
+    file.hidden = true;
+    pick.append(file);
+    media.append(pick);
+    if (pic) {
+      const drop = el('button', { type: 'button', className: 'danger' }, 'Quitar foto');
+      drop.addEventListener('click', () => deleteDoc(doc(db, 'prizeImages', prize.id)).catch(showError));
+      media.append(drop);
+    }
+    file.addEventListener('change', async () => {
+      const chosen = file.files[0];
+      if (!chosen) return;
+      if (!chosen.type.startsWith('image/')) return alert('Elegí una foto o una imagen.');
+      try {
+        await setDoc(doc(db, 'prizeImages', prize.id), { data: await compressImage(chosen) });
+        saveConfig(); // asegura que el premio (y su id) queden guardados
+      } catch (err) {
+        showError(err);
+      }
+      if (document.activeElement) document.activeElement.blur();
+      renderPrizes();
+    });
+
     const showResult = () => {
       if (winner.value.length < 4) return setMsg(result, 'Sin sortear todavía');
       const sale = state.sales[winner.value];
@@ -773,11 +850,12 @@ function renderPrizes() {
       showResult();
     });
     remove.addEventListener('click', () => {
+      deleteDoc(doc(db, 'prizeImages', prize.id)).catch(() => {});
       state.prizes.splice(i, 1);
       saveConfig();
       renderPrizes();
     });
-    row.append(el('span', { className: 'prize-n' }, String(i + 1) + '°'), name, winner, remove, result);
+    row.append(el('span', { className: 'prize-n' }, String(i + 1) + '°'), name, winner, remove, media, result);
     box.append(row);
     showResult();
   });
@@ -1040,6 +1118,9 @@ function startListening() {
     onSnapshot(doc(db, 'config', 'main'), (snap) => { applyConfig(snap.data()); scheduleRender(); }, fail),
     watch('students', (data) => { state.students = data; }),
     watch('sales', (data) => { state.sales = data; }),
+    watch('prizeImages', (data) => {
+      state.prizeImages = Object.fromEntries(Object.entries(data).map(([id, d]) => [id, d.data]));
+    }),
   );
 }
 

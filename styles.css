@@ -263,3 +263,11 @@ button, .cell, .chip { touch-action: manipulation; }
 /* ---- Imagen para compartir ---- */
 #share-img { display: block; width: 100%; max-height: 60vh; object-fit: contain; margin: 8px 0 16px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 #share-send[hidden] { display: none; }
+
+/* ---- Fotos de premios ---- */
+.prize-media { grid-column: 2 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 2px 0 4px; }
+.prize-thumb { height: 64px; max-width: 120px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: #fff; }
+.file-btn { display: inline-block; margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-weight: 500; font-size: .9rem; cursor: pointer; }
+.file-btn:hover { background: #f3f4f6; }
+
+.hero p strong { color: var(--text); }
