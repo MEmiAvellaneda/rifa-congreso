@@ -43,6 +43,8 @@ const defaultPrizes = () => [
 // Textos de la imagen de publicidad (se editan desde la página)
 const defaultAd = () => ({
   contact: '',
+  alias: 'cevet2026',
+  bank: 'Ualá Bank S.A.U.',
   drawDate: '19/02/2027',
   drawNote: 'Lotería vespertina de Tucumán (4 cifras)',
   promo: '3 números $10.000',
@@ -770,6 +772,19 @@ function drawShareImage(name, numbers, logo, pics = {}, phone = '', fondo = null
     }
     y += BAND_H + 14;
 
+    /* Datos para transferir */
+    const alias = (ad.alias || '').trim(), bank = (ad.bank || '').trim();
+    if (alias) {
+      card(ctx, 32, y, 960, 104, 28, '#f9f8f4', VERDE);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = VERDE_OSCURO;
+      ctx.font = `500 20px ${FONT}`;
+      spaced(ctx, 'PAGÁ POR TRANSFERENCIA', D / 2 + 1, y + 34, 3);
+      ctx.fillStyle = INK;
+      fitText(ctx, bank ? `Alias: ${alias}  ·  ${bank}` : `Alias: ${alias}`, D / 2, y + 78, 900, 38);
+      y += 104 + 14;
+    }
+
     /* Mensaje final: globo, texto y avioncito */
     const about = ad.about.trim();
     const textW = 470;
@@ -1192,7 +1207,7 @@ function saveConfig() {
 const isEditing = (node) => node.contains(document.activeElement);
 
 // Campos de "Datos para la publicidad": clave en state.ad -> id del campo
-const AD_FIELDS = { contact: 'ad-contact', drawDate: 'ad-date', drawNote: 'ad-note', promo: 'ad-promo', about: 'ad-about' };
+const AD_FIELDS = { contact: 'ad-contact', alias: 'ad-alias', bank: 'ad-bank', drawDate: 'ad-date', drawNote: 'ad-note', promo: 'ad-promo', about: 'ad-about' };
 
 function applyConfig(data) {
   state.goal = (data && data.goal) || 0;
