@@ -607,6 +607,8 @@ function drawShareImage(name, numbers, logo, pics = {}, phone = '', fondo = null
     /* Cabecera: el fondo del diseño (título + ventanilla) y el 2027 al lado de EUROTRIP */
     if (fondo) {
       ctx.drawImage(fondo, 0, 0, 1024, 548, 0, 0, 1024, 548);
+      ctx.fillStyle = CREMA; // tapa la leyenda que viene dentro de la imagen, debajo del título
+      ctx.fillRect(0, 428, 680, 120);
       ctx.textAlign = 'left';
       ctx.fillStyle = INK;
       ctx.font = `300 82px ${FONT}`;
