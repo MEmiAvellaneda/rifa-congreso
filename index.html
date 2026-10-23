@@ -113,7 +113,11 @@
         </label>
         <p id="proof-check" class="proof-check" hidden></p>
         <p id="form-msg" class="msg" role="status"></p>
-        <button type="submit" class="primary">Guardar venta</button>
+        <div class="btn-row">
+          <button type="submit" class="primary">Guardar venta</button>
+          <button type="button" id="btn-reserve">Reservar sin pagar</button>
+        </div>
+        <small class="hint">Reservar aparta los números para alguien que todavía no pagó: no cuentan como vendidos. Cuando pague, tocá el número naranja y guardá la venta con el comprobante.</small>
       </form>
     </section>
 
@@ -171,6 +175,7 @@
       <div class="legend">
         <i class="dot free"></i>Sin asignar
         <i class="dot assigned"></i>Asignado
+        <i class="dot reserved"></i>Reservado
         <i class="dot sold"></i>Vendido
       </div>
       <div id="grid" class="grid"></div>

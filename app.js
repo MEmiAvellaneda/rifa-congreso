@@ -51,7 +51,7 @@ const defaultAd = () => ({
   about: 'A beneficio del Viaje Académico y de Inmersión Tecnológica 2027: Tech Show London e IBM Quantum Spain. ¡Tu colaboración nos acerca a nuestro sueño!',
 });
 
-const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, prizeImages: {} };
+const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, reservations: {}, prizeImages: {} };
 let currentBlock = 0;
 const picked = new Set(); // números tocados en el formulario de venta
 
@@ -388,8 +388,10 @@ function renderStudents() {
     const chips = el('div', { className: 'chips' });
     for (const n of s.numbers) {
       const sale = state.sales[n];
-      const chip = el('span', { className: 'chip ' + (sale ? 'sold' : '') }, n);
-      chip.title = sale ? `Vendido a ${sale.buyer}` : 'Falta vender';
+      const reserva = !sale && state.reservations[n];
+      const chip = el('span', { className: 'chip ' + (sale ? 'sold' : reserva ? 'reserved' : '') }, n);
+      chip.title = sale ? `Vendido a ${sale.buyer}` : reserva ? `Reservado para ${reserva.buyer} (tocá para liberar)` : 'Falta vender';
+      if (reserva) chip.dataset.reserved = n;
       chips.append(chip);
     }
     card.append(chips);
@@ -433,6 +435,13 @@ $('students-grid').addEventListener('change', async (e) => {
 });
 
 $('students-grid').addEventListener('click', async (e) => {
+  const reserved = e.target.closest('.chip[data-reserved]');
+  if (reserved) {
+    const n = reserved.dataset.reserved;
+    const r = state.reservations[n];
+    if (r && confirm(`El ${n} está reservado para ${r.buyer}${r.phone ? ' (' + r.phone + ')' : ''}. ¿Liberar la reserva?`)) deleteDoc(doc(db, 'reservations', n)).catch(showError);
+    return;
+  }
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
   const id = btn.dataset.id;
@@ -457,7 +466,7 @@ $('students-grid').addEventListener('click', async (e) => {
   } else if (btn.dataset.act === 'image') {
     openShare(s.name, s.numbers, s.phone);
   } else if (btn.dataset.act === 'copy') {
-    const free = s.numbers.filter((n) => !state.sales[n]);
+    const free = s.numbers.filter((n) => !state.sales[n] && !state.reservations[n]);
     const text = `${s.name} - números para vender: ${free.join(', ')}`;
     try {
       await navigator.clipboard.writeText(text);
@@ -467,6 +476,7 @@ $('students-grid').addEventListener('click', async (e) => {
     }
   } else if (btn.dataset.act === 'delete') {
     if (s.numbers.some((n) => state.sales[n])) return say('No se puede eliminar: ya tiene ventas registradas.', 'error');
+    if (s.numbers.some((n) => state.reservations[n])) return say('No se puede eliminar: tiene números reservados. Liberalos primero.', 'error');
     if (!confirm(`¿Eliminar a ${s.name}? Sus ${s.numbers.length} números quedarán sin asignar.`)) return;
     delete cardMsg[id];
     deleteDoc(doc(db, 'students', id)).catch(showError);
@@ -711,7 +721,7 @@ function drawShareImage(name, numbers, logo, pics = {}, phone = '', fondo = null
     numbers.forEach((n, i) => {
       const cx = gx + (i % COLS) * (CELL_W + GAP);
       const cy = gridTop + Math.floor(i / COLS) * (CELL_H + GAP);
-      const sold = Boolean(state.sales[n]);
+      const sold = Boolean(state.sales[n] || state.reservations[n]);
       card(ctx, cx, cy, CELL_W, CELL_H, 18, sold ? '#dedcd4' : '#fff', null);
       if (!sold) { ctx.lineWidth = 3; ctx.strokeStyle = VERDE; ctx.stroke(); }
       ctx.textAlign = 'center';
@@ -919,11 +929,14 @@ function renderChips() {
   const q = $('f-filter').value.trim();
   const shown = q ? free.filter((n) => n.includes(q)) : free;
   const chosen = picked.size ? ` · elegidos: ${[...picked].sort().join(', ')}` : '';
+  const reservados = free.filter((n) => state.reservations[n]).length;
   $('f-count').textContent = free.length
-    ? `${free.length} disponibles${q ? ` · ${shown.length} coinciden con "${q}"` : ''}${chosen}`
+    ? `${free.length} disponibles${reservados ? ` (${reservados} reservados, en naranja)` : ''}${q ? ` · ${shown.length} coinciden con "${q}"` : ''}${chosen}`
     : 'A este alumno no le quedan números por vender.';
   for (const n of shown) {
-    const chip = el('button', { type: 'button', className: 'chip pick' + (picked.has(n) ? ' sel' : '') }, n);
+    const reserva = state.reservations[n];
+    const chip = el('button', { type: 'button', className: 'chip pick' + (picked.has(n) ? ' sel' : reserva ? ' reserved' : '') }, n);
+    if (reserva) chip.title = `Reservado para ${reserva.buyer}`;
     chip.dataset.num = n;
     chips.append(chip);
   }
@@ -1114,6 +1127,11 @@ $('f-chips').addEventListener('click', (e) => {
   if (!chip) return;
   const n = chip.dataset.num;
   if (picked.has(n)) picked.delete(n); else picked.add(n);
+  const reserva = state.reservations[n];
+  if (reserva && picked.has(n)) { // reservado: se completan los datos de quien reservó
+    if (!$('f-buyer').value.trim()) $('f-buyer').value = reserva.buyer || '';
+    if (!$('f-phone').value.trim()) $('f-phone').value = reserva.phone || '';
+  }
   renderChips();
   updateTotal();
 });
@@ -1178,6 +1196,7 @@ $('sale-form').addEventListener('submit', async (e) => {
       if (already.length) throw new Error(`Ya vendidos: ${already.join(', ')}.`);
       const base = Math.floor(amount / numbers.length);
       const extra = amount - base * numbers.length; // los pesos que sobran van de a uno a los primeros números
+      numbers.forEach((n) => tx.delete(doc(db, 'reservations', n)));
       refs.forEach((ref, i) => tx.set(ref, {
         buyer,
         phone: $('f-phone').value.trim(),
@@ -1207,6 +1226,37 @@ $('sale-form').addEventListener('submit', async (e) => {
   proofOcr = null;
   updateTotal();
   setMsg(msg, `Venta guardada: ${numbers.join(', ')} (${money(amount)})`, 'ok');
+});
+
+// Reservar: aparta números para alguien sin comprobante todavía (no cuentan como vendidos)
+$('btn-reserve').addEventListener('click', async () => {
+  const msg = $('form-msg');
+  const { mode, id } = chosenSeller();
+  if (mode !== 'student') return setMsg(msg, 'Para reservar, elegí al alumno y tocá los números.', 'error');
+  const numbers = [...picked].sort();
+  if (!numbers.length) return setMsg(msg, 'Tocá al menos un número de la lista.', 'error');
+  const buyer = $('f-buyer').value.trim();
+  if (!buyer) return setMsg(msg, 'Para reservar, escribí el nombre de quien lo pide.', 'error');
+  const ya = numbers.filter((n) => state.reservations[n] && state.reservations[n].buyer !== buyer);
+  if (ya.length) return setMsg(msg, `Ya reservados para otra persona: ${ya.join(', ')}.`, 'error');
+  try {
+    await runTransaction(db, async (tx) => {
+      const sales = await Promise.all(numbers.map((n) => tx.get(doc(db, 'sales', n))));
+      const vendidos = numbers.filter((n, i) => sales[i].exists());
+      if (vendidos.length) throw new Error(`Ya vendidos: ${vendidos.join(', ')}.`);
+      numbers.forEach((n) => tx.set(doc(db, 'reservations', n), {
+        studentId: id, buyer, phone: $('f-phone').value.trim(), ts: Date.now(), by: auth.currentUser.email,
+      }));
+    });
+  } catch (err) {
+    return setMsg(msg, 'No se reservó: ' + err.message, 'error');
+  }
+  picked.clear();
+  $('f-buyer').value = '';
+  $('f-phone').value = '';
+  renderChips();
+  updateTotal();
+  setMsg(msg, `Reservado para ${buyer}: ${numbers.join(', ')}. Cuando pague, tocalo (naranja) y registrá la venta con el comprobante.`, 'ok');
 });
 
 /* ---------- Configuración (meta y premios) ---------- */
@@ -1338,9 +1388,12 @@ function renderGrid() {
     const sale = state.sales[num];
     const btn = el('button', { type: 'button', className: 'cell' }, num);
     btn.dataset.num = num;
+    const reserva = !sale && state.reservations[num];
     if (sale) btn.classList.add('sold');
+    else if (reserva) btn.classList.add('reserved');
     else if (owner[num]) btn.classList.add('assigned');
     btn.title = sale ? sale.buyer + ' · ' + studentName(sale.studentId)
+      : reserva ? 'Reservado para ' + reserva.buyer + ' · ' + studentName(reserva.studentId)
       : owner[num] ? 'Asignado a ' + studentName(owner[num]) : 'Sin asignar';
     grid.append(btn);
   }
@@ -1589,6 +1642,7 @@ function startListening() {
     onSnapshot(doc(db, 'config', 'main'), (snap) => { applyConfig(snap.data()); scheduleRender(); }, fail),
     watch('students', (data) => { state.students = data; }),
     watch('sales', (data) => { state.sales = data; }),
+    watch('reservations', (data) => { state.reservations = data; }),
     watch('prizeImages', (data) => {
       state.prizeImages = Object.fromEntries(Object.entries(data).map(([id, d]) => [id, d.data]));
     }),

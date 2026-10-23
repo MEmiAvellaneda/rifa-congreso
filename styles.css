@@ -114,6 +114,8 @@ button.danger { color: var(--danger); border-color: #fecaca; }
   border: 1px solid #dbe1ea;
 }
 .cell.sold { background: var(--paid); border-color: #15a34a; color: #fff; }
+.cell.reserved { background: #f97316; border-color: #ea580c; color: #fff; }
+.dot.reserved { background: #f97316; border-color: #ea580c; }
 .cell.sel { background: var(--brand); border-color: var(--brand); color: #fff; }
 @media (max-width: 520px) { .cell { font-size: .72rem; padding: 8px 0; } .grid { gap: 4px; } }
 
@@ -159,6 +161,8 @@ dd { margin: 0; }
   background: var(--free); border: 1px solid #dbe1ea;
 }
 .chip.sold { background: var(--paid); border-color: #15a34a; color: #fff; }
+.chip.reserved { background: #f97316; border-color: #ea580c; color: #fff; }
+.chip[data-reserved] { cursor: pointer; }
 button.chip.pick { cursor: pointer; }
 button.chip.sel { background: var(--brand); border-color: var(--brand); color: #fff; }
 
