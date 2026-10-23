@@ -368,7 +368,6 @@ function renderStudents() {
   for (const id of ids) {
     const s = state.students[id];
     const st = statsFor(id);
-    const left = s.numbers.filter((n) => !state.sales[n]).length;
     const card = el('article', { className: 'student-card' });
     card.append(el('h3', {}, s.name));
     card.append(el('p', { className: 'hint' },
@@ -399,7 +398,7 @@ function renderStudents() {
     card.append(el('p', { className: 'msg' + (msg ? ' ' + msg.kind : '') }, msg ? msg.text : ''));
 
     const actions = el('div', { className: 'btn-row' });
-    const more = el('button', { type: 'button', className: left ? 'muted' : 'primary' }, 'Pedir más números');
+    const more = el('button', { type: 'button', className: 'primary' }, 'Pedir más números');
     more.dataset.act = 'more';
     const image = el('button', { type: 'button' }, 'Imagen para compartir');
     image.dataset.act = 'image';
@@ -441,8 +440,6 @@ $('students-grid').addEventListener('click', async (e) => {
   const say = (text, kind) => { cardMsg[id] = { text, kind }; renderStudents(); };
 
   if (btn.dataset.act === 'more') {
-    const left = s.numbers.filter((n) => !state.sales[n]).length;
-    if (left > 0) return say(`Primero tiene que vender los ${left} números que le quedan.`, 'error');
     const input = prompt(`¿Cuántos números más para ${s.name}?`, String(MIN_PER_STUDENT));
     if (input === null) return;
     const count = Number(input);
