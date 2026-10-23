@@ -977,11 +977,12 @@ function loadOcr() {
 // Un solo lector reutilizado (crearlo cada vez tarda y gasta memoria); las lecturas se hacen de a una
 let ocrWorker;
 let ocrQueue = Promise.resolve();
-function recognizeText(canvas) {
+function recognizeText(canvas, sparse = false) {
   const run = async () => {
     try {
       ocrWorker ||= loadOcr().then((T) => T.createWorker('eng'));
       const worker = await ocrWorker;
+      await worker.setParameters({ tessedit_pageseg_mode: sparse ? '11' : '3' }); // 11: texto suelto, para montos grandes
       return (await worker.recognize(canvas)).data.text || '';
     } catch (err) {
       ocrWorker = null;
@@ -997,9 +998,12 @@ function recognizeText(canvas) {
 function amountsIn(text) {
   const found = new Set();
   const withSeparators = '\\d{1,3}(?:[.\\s]\\d{3})+(?:,\\d{1,2})?'; // 10.000  10.000,00  10 000
+  const dotted = '\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,2})?'; // sin espacios: no confunde "4191375-1 089-6" con un monto
   const plain = '\\d+(?:,\\d{1,2})?'; // 10000  4000,50
-  const re = new RegExp(`(?:\\$|ARS|AR\\$)\\s*(${withSeparators}|${plain})(?!\\d)|(?:^|[^\\d.,])(${withSeparators})(?![\\d.])`, 'gim');
-  for (const m of text.matchAll(re)) {
+  const re = new RegExp(`(?:\\$|ARS|AR\\$)\\s*(${withSeparators}|${plain})(?![\\d-])|(?:^|[^\\d.,-])(${dotted})(?![\\d.-])`, 'gim');
+  // Las líneas con cuentas, CBU/CUIT o número de operación no tienen el monto
+  const lines = text.split('\n').filter((l) => !/cuit|cuil|cbu|cvu|n[°º]|nro|operaci[oó]n|cuenta|\bca\b/i.test(l));
+  for (const m of lines.join('\n').matchAll(re)) {
     const raw = (m[1] || m[2]).replace(/[.\s]/g, '').replace(',', '.');
     const value = parseFloat(raw);
     if (value >= 100 && value <= 10000000) found.add(value);
@@ -1046,8 +1050,20 @@ function readProof(file) {
   proofOcr = current;
   current.promise = (async () => {
     try {
-      current.text = await recognizeText(await imageForOcr(file));
+      const canvas = await imageForOcr(file);
+      current.text = await recognizeText(canvas);
       current.amounts = amountsIn(current.text);
+      if (!current.amounts.length) {
+        // El monto suele ir arriba y en letra grande: se vuelve a leer solo esa parte, agrandada
+        const top = document.createElement('canvas');
+        const h = Math.round(canvas.height * 0.28);
+        top.width = canvas.width * 2;
+        top.height = h * 2;
+        top.getContext('2d').drawImage(canvas, 0, 0, canvas.width, h, 0, 0, top.width, top.height);
+        const more = await recognizeText(top, true);
+        current.text += '\n' + more;
+        current.amounts = amountsIn(current.text);
+      }
     } catch (err) {
       current.failed = true;
     }
