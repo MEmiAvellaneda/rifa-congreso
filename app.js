@@ -1440,7 +1440,7 @@ function renderTable() {
   const text = $('filter').value.trim().toLowerCase();
   const rows = Object.keys(state.sales).sort().filter((num) => {
     const s = state.sales[num];
-    return !text || [num, s.buyer, studentName(s.studentId)].join(' ').toLowerCase().includes(text);
+    return !text || [num, s.buyer, s.phone || '', studentName(s.studentId)].join(' ').toLowerCase().includes(text);
   });
 
   const body = $('sales-body');
@@ -1450,8 +1450,12 @@ function renderTable() {
     const tr = el('tr');
     // data-label: en el celular cada fila se muestra como una tarjeta con su título
     [num, s.buyer, s.phone || '', studentName(s.studentId), fmtDate(s.ts)].forEach((v, i) => {
-      const td = el('td', {}, v);
-      td.dataset.label = ['Número', 'Comprador/a', 'Contacto', 'Vendedor/a', 'Fecha'][i];
+      const td = el('td', {}, i === 2 && v.replace(/D/g, '').length >= 8 ? '' : v);
+      if (i === 2 && !td.textContent && v) { // celular: se toca para llamar
+        const a = el('a', { href: 'tel:' + v.replace(/[^d+]/g, '') }, v);
+        td.append(a);
+      }
+      td.dataset.label = ['Número', 'Comprador/a', 'Celular del comprador', 'Vendedor/a', 'Fecha'][i];
       tr.append(td);
     });
     const tdState = el('td');

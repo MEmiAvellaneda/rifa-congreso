@@ -314,3 +314,4 @@ input[type=tel] { width: 100%; margin-top: 4px; padding: 9px 10px; border: 1px s
 .proof-check.warn { background: #fff7ed; border-color: #fdba74; color: #9a3412; }
 
 input.calculado { background: #f5f5f4; font-weight: 700; color: #18181b; cursor: default; }
+td a { color: var(--brand); font-weight: 600; text-decoration: underline; }
