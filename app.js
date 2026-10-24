@@ -1530,6 +1530,30 @@ $('d-delete').addEventListener('click', async () => {
   $('detail').close();
 });
 
+// Corregir el nombre o el celular del comprador (si tiene otras compras con los mismos datos, se ofrece cambiarlas juntas)
+$('d-edit').addEventListener('click', async () => {
+  const num = detailNum;
+  const s = state.sales[num];
+  if (!s) return;
+  const buyer = prompt('Nombre de quien compró:', s.buyer || '');
+  if (buyer === null) return;
+  const phone = prompt('Celular o contacto:', s.phone || '');
+  if (phone === null) return;
+  const name = buyer.trim(), tel = phone.trim();
+  if (!name) return alert('Falta el nombre de quien compró.');
+  if (tel && tel.replace(/D/g, '').length < 8) return alert('Ese celular parece incompleto (al menos 8 números).');
+  let targets = [num];
+  const same = Object.keys(state.sales).filter((n) => n !== num && state.sales[n].buyer === s.buyer && (state.sales[n].phone || '') === (s.phone || ''));
+  if (same.length && confirm(`${name} tiene otras ${same.length} compra${same.length > 1 ? 's' : ''} con los datos anteriores. ¿Cambiarlas también?`)) targets = [num, ...same];
+  try {
+    await Promise.all(targets.map((n) => setDoc(doc(db, 'sales', n), { buyer: name, phone: tel }, { merge: true })));
+  } catch (err) {
+    return showError(err);
+  }
+  $('detail').close();
+  openDetail(num);
+});
+
 $('d-close').addEventListener('click', () => $('detail').close());
 
 /* ---------- Exportar / respaldo ---------- */
