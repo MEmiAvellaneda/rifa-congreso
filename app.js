@@ -335,7 +335,7 @@ function renderBarChart() {
 
   const W = Math.max(300, Math.min(640, box.clientWidth || 640));
   const narrow = W < 480;
-  const L = narrow ? 92 : 150, R = narrow ? 104 : 90, ROW = 28, T = 8;
+  const L = narrow ? 92 : 150, R = narrow ? 118 : 130, ROW = 28, T = 8;
   const maxName = narrow ? 12 : 20;
   const H = T + rows.length * ROW + 8;
   const max = Math.max(...rows.map((r) => r.collected), 1);
