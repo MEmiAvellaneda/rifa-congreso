@@ -406,9 +406,11 @@ function renderStudents() {
     image.dataset.act = 'image';
     const copy = el('button', { type: 'button' }, 'Copiar lista');
     copy.dataset.act = 'copy';
+    const merge = el('button', { type: 'button' }, 'Unir con otro alumno');
+    merge.dataset.act = 'merge';
     const del = el('button', { type: 'button', className: 'danger' }, 'Eliminar');
     del.dataset.act = 'delete';
-    for (const b of [more, image, copy, del]) { b.dataset.id = id; actions.append(b); }
+    for (const b of [more, image, copy, merge, del]) { b.dataset.id = id; actions.append(b); }
     card.append(actions);
     box.append(card);
   }
@@ -474,6 +476,26 @@ $('students-grid').addEventListener('click', async (e) => {
     } catch (err) {
       prompt('Copiá la lista:', text);
     }
+  } else if (btn.dataset.act === 'merge') {
+    // Une a este alumno dentro de otro (por ejemplo, un nombre cargado dos veces): pasan sus números, ventas y reservas
+    const typed = prompt(`¿Con qué alumno se une ${s.name}? Escribí el nombre tal cual figura (se mantiene ese alumno y ${s.name} desaparece):`);
+    if (typed === null) return;
+    const targetId = Object.keys(state.students).find((k) => k !== id && state.students[k].name.trim().toLowerCase() === typed.trim().toLowerCase());
+    if (!targetId) return say('No encontré un alumno con ese nombre.', 'error');
+    const t = state.students[targetId];
+    if (!confirm(`Se pasan los ${s.numbers.length} números de ${s.name} (y sus ventas) a ${t.name}, y ${s.name} se elimina. ¿Confirmás?`)) return;
+    try {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'students', targetId), { numbers: [...new Set([...t.numbers, ...s.numbers])].sort(), phone: t.phone || s.phone || '' }, { merge: true });
+      for (const [n, sale] of Object.entries(state.sales)) if (sale.studentId === id) batch.set(doc(db, 'sales', n), { studentId: targetId }, { merge: true });
+      for (const [n, r] of Object.entries(state.reservations)) if (r.studentId === id) batch.set(doc(db, 'reservations', n), { studentId: targetId }, { merge: true });
+      batch.delete(doc(db, 'students', id));
+      await batch.commit();
+      delete cardMsg[id];
+      cardMsg[targetId] = { text: `Se unió ${s.name} con ${t.name}.`, kind: 'ok' };
+    } catch (err) {
+      return showError(err);
+    }
   } else if (btn.dataset.act === 'delete') {
     if (s.numbers.some((n) => state.sales[n])) return say('No se puede eliminar: ya tiene ventas registradas.', 'error');
     if (s.numbers.some((n) => state.reservations[n])) return say('No se puede eliminar: tiene números reservados. Liberalos primero.', 'error');
@@ -484,7 +506,7 @@ $('students-grid').addEventListener('click', async (e) => {
 });
 
 /* ---------- Imagen para compartir ---------- */
-// Se dibuja en un <canvas> con los números del alumno; los ya vendidos salen tachados.
+// Se dibuja en un <canvas> con los números del alumno; solo salen los disponibles.
 
 function roundRectPath(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -706,7 +728,9 @@ function drawShareImage(name, numbers, logo, pics = {}, phone = '', fondo = null
     y += BOX_H + 14;
 
     /* Números del alumno */
-    const numRows = Math.ceil(numbers.length / COLS);
+    // Solo los disponibles: lo vendido o reservado no se ofrece
+    const libres = numbers.filter((n) => !state.sales[n] && !state.reservations[n]);
+    const numRows = Math.max(1, Math.ceil(libres.length / COLS));
     const numH = 14 + 44 + 22 + numRows * (CELL_H + GAP) + 10;
     card(ctx, 34, y, 956, numH, 30, GRIS_CAJA, null);
     const title = ('Números de ' + name).toUpperCase();
@@ -718,24 +742,22 @@ function drawShareImage(name, numbers, logo, pics = {}, phone = '', fondo = null
     spaced(ctx, title, 54 + 28, y + 14 + 31, 2.4);
     const gridTop = y + 14 + 44 + 22;
     const gx = 54 + (916 - (COLS * CELL_W + (COLS - 1) * GAP)) / 2;
-    numbers.forEach((n, i) => {
+    if (!libres.length) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = INK;
+      fitText(ctx, 'Ya no quedan números disponibles', 512, gridTop + CELL_H / 2 + 12, 860, 34);
+    }
+    libres.forEach((n, i) => {
       const cx = gx + (i % COLS) * (CELL_W + GAP);
       const cy = gridTop + Math.floor(i / COLS) * (CELL_H + GAP);
-      const sold = Boolean(state.sales[n] || state.reservations[n]);
-      card(ctx, cx, cy, CELL_W, CELL_H, 18, sold ? '#dedcd4' : '#fff', null);
-      if (!sold) { ctx.lineWidth = 3; ctx.strokeStyle = VERDE; ctx.stroke(); }
+      card(ctx, cx, cy, CELL_W, CELL_H, 18, '#fff', null);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = VERDE;
+      ctx.stroke();
       ctx.textAlign = 'center';
-      ctx.fillStyle = sold ? '#a3a399' : '#1c2a1f';
+      ctx.fillStyle = '#1c2a1f';
       ctx.font = `bold 40px ${FONT}`;
       ctx.fillText(n, cx + CELL_W / 2, cy + CELL_H / 2 + 14);
-      if (sold) {
-        ctx.strokeStyle = '#a3a399';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(cx + 20, cy + CELL_H / 2 + 2);
-        ctx.lineTo(cx + CELL_W - 20, cy + CELL_H / 2 + 2);
-        ctx.stroke();
-      }
     });
     y += numH + 14;
 
