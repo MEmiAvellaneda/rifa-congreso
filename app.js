@@ -23,7 +23,7 @@ const PROMO_PRICE = 10000; // ...cuestan $10.000
 // Total a cobrar por n números: los grupos de 3 con la promoción y el resto a precio normal
 const totalFor = (n) => Math.floor(n / PROMO_QTY) * PROMO_PRICE + (n % PROMO_QTY) * PRICE;
 const BLOCK_SIZE = 100;
-const MIN_PER_STUDENT = 15;
+const SUGERIDOS_POR_ALUMNO = 15; // cantidad que se sugiere; se puede pedir cualquier cantidad desde 1
 const MAX_ROWS = 300;
 const DAY = 86400000;
 const DIRECT = 'Venta directa (sin alumno)';
@@ -218,9 +218,7 @@ $('student-form').addEventListener('submit', async (e) => {
   const phone = $('s-phone').value.trim();
   if (!name) return setMsg(msg, 'Falta el nombre.', 'error');
   if (phone.replace(/\D/g, '').length < 8) return setMsg(msg, 'Cargá el teléfono del alumno (al menos 8 números).', 'error');
-  if (!Number.isInteger(count) || count < MIN_PER_STUDENT) {
-    return setMsg(msg, `Cada alumno debe tener al menos ${MIN_PER_STUDENT} números.`, 'error');
-  }
+  if (!Number.isInteger(count) || count < 1) return setMsg(msg, 'Poné al menos 1 número.', 'error');
   if (name.toLowerCase() === DIRECT.toLowerCase()) return setMsg(msg, 'Ese nombre no está disponible.', 'error');
   const exists = Object.values(state.students).some((s) => s.name.toLowerCase() === name.toLowerCase());
   if (exists) return setMsg(msg, 'Ya hay un alumno con ese nombre.', 'error');
@@ -451,7 +449,7 @@ $('students-grid').addEventListener('click', async (e) => {
   const say = (text, kind) => { cardMsg[id] = { text, kind }; renderStudents(); };
 
   if (btn.dataset.act === 'more') {
-    const input = prompt(`¿Cuántos números más para ${s.name}?`, String(MIN_PER_STUDENT));
+    const input = prompt(`¿Cuántos números más para ${s.name}?`, String(SUGERIDOS_POR_ALUMNO));
     if (input === null) return;
     const count = Number(input);
     if (!Number.isInteger(count) || count < 1) return say('Cantidad inválida.', 'error');
