@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bono Contribución - Viaje Académico 2027</title>
-  <link rel="stylesheet" href="styles.css?v=20261105b">
+  <link rel="stylesheet" href="styles.css?v=20261105c">
 </head>
 <body>
   <header class="hero" data-view="inicio">
@@ -25,6 +25,7 @@
       <li><button type="button" data-go="venta">🧾 Registrar venta</button></li>
       <li><button type="button" data-go="ventas">📋 Ventas registradas</button></li>
       <li><button type="button" data-go="gastos">💸 Gastos</button></li>
+      <li><button type="button" data-go="tareas">✅ Tareas</button></li>
       <li><button type="button" data-go="grilla">🔢 Grilla de números</button></li>
       <li><button type="button" data-go="publicidad">📣 Publicidad y premios</button></li>
       <li><button type="button" data-go="config">⚙️ Configuración y respaldo</button></li>
@@ -260,6 +261,60 @@
 
     </section>
 
+    <!-- Tareas -->
+    <section class="card" data-view="tareas" aria-labelledby="t-tareas">
+      <h2 id="t-tareas">Tareas</h2>
+      <p class="hint">Lo que falta hacer, lo que ya se señó y lo que se canceló. Cada tarea tiene un estado que se cambia con un toque.</p>
+      <details class="import add-task">
+        <summary>➕ Agregar una tarea</summary>
+      <form id="task-form" autocomplete="off">
+        <div class="row-form">
+          <label>Tarea
+            <input type="text" id="k-title" maxlength="120" placeholder="Ej: Alquilar sillas y mesas" required>
+          </label>
+          <label>Lista (opcional)
+            <input type="text" id="k-list" list="k-lists" maxlength="40" placeholder="Ej: Peña">
+          </label>
+        </div>
+        <datalist id="k-lists"></datalist>
+        <div class="row-form">
+          <label>Responsable (opcional)
+            <input type="text" id="k-owner" maxlength="60" placeholder="Ej: Jose">
+          </label>
+          <label>Nota (opcional)
+            <input type="text" id="k-note" maxlength="200" placeholder="Ej: Seña de $45.000">
+          </label>
+        </div>
+        <label>Sub-tareas (opcional, una por renglón)
+          <textarea id="k-subs" rows="3" placeholder="Ej:&#10;La juntada&#10;Miguel Aragón&#10;Luciano Calderón"></textarea>
+        </label>
+        <button type="submit" class="primary">Agregar tarea</button>
+      </form>
+      </details>
+
+      <div class="task-filters top-gap">
+        <label class="inline-select">Lista
+          <select id="k-filter-list"></select>
+        </label>
+        <div id="k-tabs" class="tabs" role="tablist"></div>
+      </div>
+      <ul id="tasks" class="tasks"></ul>
+      <p id="k-count" class="hint"></p>
+
+      <details class="import">
+        <summary>Importar una lista pegada</summary>
+        <p class="hint">Pegá una lista numerada (una tarea por renglón: "1- Fecha", "2) Sonido"…). Se crea una tarea por renglón, todas pendientes. Los renglones que empiecen con "-" o "•" debajo de una tarea pasan a ser sus sub-tareas.</p>
+        <label>Nombre de la lista
+          <input type="text" id="k-import-list" maxlength="40" placeholder="Ej: Peña">
+        </label>
+        <label>Lista
+          <textarea id="k-import-text" rows="6" placeholder="1- Fecha&#10;2- Artistas&#10;3- Parrilla"></textarea>
+        </label>
+        <button type="button" id="k-import">Importar tareas</button>
+        <p id="k-import-msg" class="msg" role="status"></p>
+      </details>
+    </section>
+
     <!-- Respaldo -->
     <section class="card" data-view="config" aria-labelledby="t-respaldo">
       <h2 id="t-respaldo">Copia de seguridad</h2>
@@ -321,6 +376,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=20261105b"></script>
+  <script type="module" src="app.js?v=20261105c"></script>
 </body>
 </html>

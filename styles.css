@@ -337,3 +337,53 @@ td a { color: var(--brand); font-weight: 600; text-decoration: underline; }
 /* Campo de fecha (Gastos): igual que los demás campos */
 input[type=date] { width: 100%; margin-top: 4px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: #fff; }
 @media (max-width: 600px) { input[type=date] { font-size: 16px; padding: 11px 10px; } }
+
+/* Tareas */
+.task-filters { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.inline-select { display: flex; align-items: center; gap: 10px; margin: 0; }
+.inline-select select { width: auto; min-width: 180px; margin: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { padding: 8px 12px; font-size: .88rem; border-radius: 99px; }
+.tab.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.task { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: #fff; border-left-width: 6px; }
+.task.pendiente { border-left-color: #f59e0b; }
+.task.señada { border-left-color: #3b82f6; }
+.task.hecha { border-left-color: #16a34a; }
+.task.cancelada { border-left-color: #9ca3af; }
+.task.hecha .task-title, .task.cancelada .task-title { text-decoration: line-through; color: var(--muted); }
+.task-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.task-title { font-weight: 700; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+select.task-state { width: auto; min-width: 118px; margin: 0; }
+.task-meta { color: var(--muted); font-size: .82rem; margin-top: 4px; }
+.task-note { margin-top: 4px; font-size: .92rem; overflow-wrap: anywhere; }
+.task-actions { display: flex; gap: 8px; margin-top: 8px; }
+.task-actions button { padding: 4px 12px; font-size: .84rem; }
+details.import { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; }
+details.import summary { cursor: pointer; font-weight: 700; }
+details.import textarea { width: 100%; font: inherit; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; }
+@media (max-width: 600px) {
+  select.task-state { font-size: 16px; padding: 9px 8px; min-width: 112px; }
+  .inline-select select { flex: 1; }
+  .tab { padding: 9px 12px; }
+}
+
+details.add-task { margin: 0 0 14px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #fafaf9; border-top: 1px solid var(--border); }
+details.add-task summary { font-size: 1rem; }
+details.add-task form { margin-top: 12px; }
+
+/* Checklist dentro de cada tarea */
+.sub-toggle { margin-top: 8px; padding: 6px 12px; font-size: .88rem; font-weight: 600; border-style: dashed; }
+.sub-bar { height: 6px; background: #eceae6; border-radius: 99px; margin-top: 8px; overflow: hidden; }
+.sub-fill { height: 100%; background: #16a34a; }
+.subtasks { margin-top: 10px; display: grid; gap: 4px; }
+label.sub { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px 10px; background: #fafaf9; border: 1px solid var(--border); border-radius: 10px; font-weight: 500; font-size: .95rem; }
+label.sub span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+label.sub.done span { text-decoration: line-through; color: var(--muted); }
+label.sub input[type=checkbox] { width: 22px; height: 22px; flex: none; accent-color: #16a34a; }
+.sub-del { padding: 2px 8px; font-size: .8rem; color: var(--muted); border-color: transparent; background: transparent; }
+.sub-add { display: flex; gap: 8px; margin-top: 4px; }
+.sub-add input { flex: 1; margin: 0; min-width: 0; }
+.sub-add button { padding: 6px 14px; }
+@media (max-width: 600px) { .sub-add input { font-size: 16px; } label.sub { padding: 10px; } .sub-del { padding: 6px 10px; } }
+#k-subs, #k-subs:focus { width: 100%; font: inherit; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; }

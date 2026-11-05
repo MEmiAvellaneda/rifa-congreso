@@ -51,7 +51,7 @@ const defaultAd = () => ({
   about: 'A beneficio del Viaje Académico y de Inmersión Tecnológica 2027: Tech Show London e IBM Quantum Spain. ¡Tu colaboración nos acerca a nuestro sueño!',
 });
 
-const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, reservations: {}, expenses: {}, prizeImages: {} };
+const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, reservations: {}, expenses: {}, tasks: {}, prizeImages: {} };
 let currentBlock = 0;
 const picked = new Set(); // números tocados en el formulario de venta
 
@@ -1706,6 +1706,233 @@ $('g-delete').addEventListener('click', async () => {
 
 $('g-close').addEventListener('click', () => $('expense-detail').close());
 
+/* ---------- Tareas ---------- */
+
+const TASK_STATES = [
+  ['pendiente', 'Pendiente', 'pending'],
+  ['señada', 'Señada', 'seña'],
+  ['hecha', 'Hecha', 'paid'],
+  ['cancelada', 'Cancelada', 'cancel'],
+];
+const taskLabel = (st) => (TASK_STATES.find((t) => t[0] === st) || TASK_STATES[0])[1];
+let taskTab = 'todas'; // pestaña elegida: todas o un estado
+let taskList = '';     // lista elegida ('' = todas)
+const openTasks = new Set(); // tareas con el checklist desplegado
+const subDrafts = {};        // texto a medio escribir en "agregar ítem", por tarea
+const subsOf = (t) => (Array.isArray(t.subtasks) ? t.subtasks : []);
+const saveSubs = (id, subs) => setDoc(doc(db, 'tasks', id), { subtasks: subs }, { merge: true }).catch(showError);
+
+const taskLists = () => [...new Set(Object.values(state.tasks).map((t) => t.list).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+
+function renderTasks() {
+  // listas conocidas: sugerencias del formulario y filtro
+  const lists = taskLists();
+  const datalist = $('k-lists');
+  datalist.textContent = '';
+  lists.forEach((l) => datalist.append(el('option', { value: l })));
+  const sel = $('k-filter-list');
+  if (taskList && !lists.includes(taskList)) taskList = '';
+  sel.textContent = '';
+  sel.append(el('option', { value: '' }, 'Todas las listas'));
+  lists.forEach((l) => sel.append(el('option', { value: l }, l)));
+  sel.value = taskList;
+
+  const inList = Object.entries(state.tasks).filter(([, t]) => !taskList || t.list === taskList);
+  const count = (st) => inList.filter(([, t]) => (t.status || 'pendiente') === st).length;
+
+  // pestañas por estado, con su cantidad
+  const tabs = $('k-tabs');
+  tabs.textContent = '';
+  [['todas', 'Todas', inList.length], ...TASK_STATES.map(([v, label]) => [v, label + 's', count(v)])].forEach(([v, label, n]) => {
+    const b = el('button', { type: 'button', className: 'tab' + (taskTab === v ? ' active' : '') }, `${label} (${n})`);
+    b.dataset.tab = v;
+    tabs.append(b);
+  });
+
+  const order = Object.fromEntries(TASK_STATES.map(([v], i) => [v, i]));
+  const shown = inList
+    .filter(([, t]) => taskTab === 'todas' || (t.status || 'pendiente') === taskTab)
+    .sort((a, b) => (order[a[1].status || 'pendiente'] - order[b[1].status || 'pendiente']) || (a[1].ts || 0) - (b[1].ts || 0));
+
+  const ul = $('tasks');
+  ul.textContent = '';
+  for (const [id, t] of shown) {
+    const st = t.status || 'pendiente';
+    const li = el('li', { className: 'task ' + st });
+    const head = el('div', { className: 'task-head' });
+    head.append(el('span', { className: 'task-title' }, t.title));
+    const select = el('select', { className: 'task-state' });
+    select.dataset.id = id;
+    TASK_STATES.forEach(([v, label]) => select.append(el('option', { value: v }, label)));
+    select.value = st;
+    head.append(select);
+    li.append(head);
+    const meta = [t.list, t.owner ? 'Responsable: ' + t.owner : ''].filter(Boolean).join(' · ');
+    if (meta) li.append(el('div', { className: 'task-meta' }, meta));
+    if (t.note) li.append(el('div', { className: 'task-note' }, t.note));
+
+    const subs = subsOf(t);
+    const doneCount = subs.filter((x) => x.d).length;
+    const toggle = el('button', { type: 'button', className: 'sub-toggle' },
+      (openTasks.has(id) ? '▾ ' : '▸ ') + 'Checklist' + (subs.length ? ` (${doneCount}/${subs.length})` : ''));
+    toggle.dataset.id = id; toggle.dataset.act = 'toggle';
+    li.append(toggle);
+    if (subs.length) {
+      const bar = el('div', { className: 'sub-bar' });
+      bar.append(el('div', { className: 'sub-fill' }));
+      bar.firstChild.style.width = Math.round(doneCount / subs.length * 100) + '%';
+      li.append(bar);
+    }
+    if (openTasks.has(id)) {
+      const box = el('div', { className: 'subtasks' });
+      subs.forEach((x, i) => {
+        const row = el('label', { className: 'sub' + (x.d ? ' done' : '') });
+        const cb = el('input', { type: 'checkbox', checked: Boolean(x.d), className: 'sub-check' });
+        cb.dataset.id = id; cb.dataset.i = i;
+        const del = el('button', { type: 'button', className: 'sub-del', title: 'Quitar ítem' }, '✕');
+        del.dataset.id = id; del.dataset.i = i; del.dataset.act = 'sub-del';
+        row.append(cb, el('span', {}, x.t), del);
+        box.append(row);
+      });
+      const add = el('div', { className: 'sub-add' });
+      const input = el('input', { type: 'text', className: 'sub-input', placeholder: 'Agregar ítem…', maxLength: 120, value: subDrafts[id] || '' });
+      input.dataset.id = id;
+      const btn = el('button', { type: 'button' }, 'Agregar');
+      btn.dataset.id = id; btn.dataset.act = 'sub-add';
+      add.append(input, btn);
+      box.append(add);
+      li.append(box);
+    }
+    const actions = el('div', { className: 'task-actions' });
+    const edit = el('button', { type: 'button' }, 'Editar');
+    edit.dataset.id = id; edit.dataset.act = 'edit';
+    const del = el('button', { type: 'button', className: 'danger' }, 'Borrar');
+    del.dataset.id = id; del.dataset.act = 'del';
+    actions.append(edit, del);
+    li.append(actions);
+    ul.append(li);
+  }
+  const total = Object.keys(state.tasks).length;
+  $('k-count').textContent = total
+    ? `${shown.length} de ${inList.length} tarea${inList.length === 1 ? '' : 's'}`
+    : 'Todavía no hay tareas. Agregá la primera arriba, o importá una lista pegada.';
+}
+
+$('task-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = $('k-title').value.trim();
+  if (!title) return;
+  try {
+    await setDoc(doc(db, 'tasks', 'k' + Date.now()), {
+      title, list: $('k-list').value.trim(), owner: $('k-owner').value.trim(), note: $('k-note').value.trim(),
+      subtasks: $('k-subs').value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((t) => ({ t: t.slice(0, 120), d: false })),
+      status: 'pendiente', ts: Date.now(), by: auth.currentUser.email,
+    });
+  } catch (err) {
+    return showError(err);
+  }
+  $('k-subs').value = '';
+  $('k-title').value = '';
+  $('k-owner').value = '';
+  $('k-note').value = '';
+  $('k-title').focus();
+});
+
+$('k-filter-list').addEventListener('change', () => { taskList = $('k-filter-list').value; renderTasks(); });
+$('k-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-tab]');
+  if (!b) return;
+  taskTab = b.dataset.tab;
+  renderTasks();
+});
+
+$('tasks').addEventListener('change', async (e) => {
+  const cb = e.target.closest('input.sub-check');
+  if (cb) {
+    const subs = subsOf(state.tasks[cb.dataset.id] || {}).map((x) => ({ ...x }));
+    if (subs[cb.dataset.i]) subs[cb.dataset.i].d = cb.checked;
+    return saveSubs(cb.dataset.id, subs);
+  }
+  const sel = e.target.closest('select.task-state');
+  if (!sel) return;
+  try {
+    await setDoc(doc(db, 'tasks', sel.dataset.id), { status: sel.value }, { merge: true });
+  } catch (err) {
+    showError(err);
+  }
+});
+
+$('tasks').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const t = state.tasks[id];
+  if (!t) return;
+  if (btn.dataset.act === 'toggle') {
+    if (openTasks.has(id)) openTasks.delete(id); else openTasks.add(id);
+    return renderTasks();
+  }
+  if (btn.dataset.act === 'sub-add') return addSubtask(id);
+  if (btn.dataset.act === 'sub-del') {
+    const subs = subsOf(t).filter((_, i) => i !== Number(btn.dataset.i));
+    return saveSubs(id, subs);
+  }
+  if (btn.dataset.act === 'del') {
+    if (!confirm(`¿Borrar la tarea "${t.title}"?`)) return;
+    return deleteDoc(doc(db, 'tasks', id)).catch(showError);
+  }
+  const title = prompt('Tarea:', t.title);
+  if (title === null) return;
+  const note = prompt('Nota (podés dejarla vacía):', t.note || '');
+  if (note === null) return;
+  const owner = prompt('Responsable (podés dejarlo vacío):', t.owner || '');
+  if (owner === null) return;
+  if (!title.trim()) return alert('La tarea no puede quedar sin texto.');
+  setDoc(doc(db, 'tasks', id), { title: title.trim(), note: note.trim(), owner: owner.trim() }, { merge: true }).catch(showError);
+});
+
+function addSubtask(id) {
+  const input = document.querySelector(`#tasks input.sub-input[data-id="${id}"]`);
+  const text = input ? input.value.trim() : '';
+  if (!text) return;
+  const subs = subsOf(state.tasks[id] || {}).map((x) => ({ ...x }));
+  subs.push({ t: text.slice(0, 120), d: false });
+  subDrafts[id] = '';
+  saveSubs(id, subs);
+}
+$('tasks').addEventListener('input', (e) => {
+  if (e.target.matches('input.sub-input')) subDrafts[e.target.dataset.id] = e.target.value;
+});
+$('tasks').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('input.sub-input')) { e.preventDefault(); addSubtask(e.target.dataset.id); }
+});
+
+// Importar: una tarea por renglón numerado ("1- Fecha", "2) Sonido", "3. Parrilla")
+$('k-import').addEventListener('click', async () => {
+  const msg = $('k-import-msg');
+  const items = [];
+  for (const raw of $('k-import-text').value.split(/\r?\n/)) {
+    const line = raw.trim();
+    const numbered = line.match(/^\d+\s*[-.)–]\s*(.+)$/);
+    const bullet = line.match(/^[-•*·]\s+(.+)$/);
+    if (numbered) items.push({ title: numbered[1].trim(), subs: [] });
+    else if (bullet && items.length) items[items.length - 1].subs.push({ t: bullet[1].trim().slice(0, 120), d: false });
+  }
+  const lines = items.map((it) => it.title);
+  if (!lines.length) return setMsg(msg, 'No encontré renglones numerados (ej: "1- Fecha").', 'error');
+  const list = $('k-import-list').value.trim();
+  const base = Date.now();
+  try {
+    await runBatched(lines.map((title, i) => (b) => b.set(doc(db, 'tasks', 'k' + (base + i)), {
+      title: title.slice(0, 120), list, owner: '', note: title.length > 120 ? title : '', subtasks: items[i].subs, status: 'pendiente', ts: base + i, by: auth.currentUser.email,
+    })));
+  } catch (err) {
+    return setMsg(msg, 'No se importó: ' + err.message, 'error');
+  }
+  $('k-import-text').value = '';
+  setMsg(msg, `Se importaron ${lines.length} tareas${list ? ' a la lista "' + list + '"' : ''}.`, 'ok');
+});
+
 /* ---------- Exportar / respaldo ---------- */
 
 $('btn-csv').addEventListener('click', () => {
@@ -1732,7 +1959,7 @@ $('btn-backup').addEventListener('click', async () => {
   try {
     const data = {
       goal: state.goal, prizes: state.prizes, ad: state.ad,
-      students: state.students, sales: state.sales, expenses: state.expenses, proofs: await allProofs(),
+      students: state.students, sales: state.sales, expenses: state.expenses, tasks: state.tasks, proofs: await allProofs(),
     };
     download('bono-respaldo.json', JSON.stringify(data), 'application/json');
   } catch (e) {
@@ -1763,10 +1990,12 @@ $('file-restore').addEventListener('change', async () => {
     for (const n of Object.keys(state.sales)) ops.push((b) => b.delete(doc(db, 'sales', n)));
     for (const id of Object.keys(state.students)) ops.push((b) => b.delete(doc(db, 'students', id)));
     for (const id of Object.keys(state.expenses)) ops.push((b) => b.delete(doc(db, 'expenses', id)));
+    for (const id of Object.keys(state.tasks)) ops.push((b) => b.delete(doc(db, 'tasks', id)));
     for (const id of oldProofs) ops.push((b) => b.delete(doc(db, 'proofs', id)));
     for (const [n, s] of Object.entries(data.sales)) ops.push((b) => b.set(doc(db, 'sales', n), s));
     for (const [id, s] of Object.entries(data.students)) ops.push((b) => b.set(doc(db, 'students', id), s));
     for (const [id, g] of Object.entries(data.expenses || {})) ops.push((b) => b.set(doc(db, 'expenses', id), g));
+    for (const [id, t] of Object.entries(data.tasks || {})) ops.push((b) => b.set(doc(db, 'tasks', id), t));
     for (const [id, url] of Object.entries(data.proofs || {})) ops.push((b) => b.set(doc(db, 'proofs', id), { data: url }));
     ops.push((b) => b.set(doc(db, 'config', 'main'), {
       goal: data.goal || 0, prizes: data.prizes || defaultPrizes(), ad: { ...defaultAd(), ...(data.ad || {}) },
@@ -1789,6 +2018,7 @@ function renderAll() {
   renderGrid();
   renderTable();
   renderExpenses();
+  renderTasks();
   if (!isEditing($('prizes'))) renderPrizes();
 }
 
@@ -1834,6 +2064,7 @@ function startListening() {
     watch('sales', (data) => { state.sales = data; }),
     watch('reservations', (data) => { state.reservations = data; }),
     watch('expenses', (data) => { state.expenses = data; }),
+    watch('tasks', (data) => { state.tasks = data; }),
     watch('prizeImages', (data) => {
       state.prizeImages = Object.fromEntries(Object.entries(data).map(([id, d]) => [id, d.data]));
     }),
@@ -1877,7 +2108,7 @@ function start() {
 
 const VIEWS = {
   inicio: 'Inicio', alumnos: 'Alumnos y números', venta: 'Registrar venta', ventas: 'Ventas registradas',
-  gastos: 'Gastos', grilla: 'Grilla de números', publicidad: 'Publicidad y premios', config: 'Configuración y respaldo',
+  gastos: 'Gastos', tareas: 'Tareas', grilla: 'Grilla de números', publicidad: 'Publicidad y premios', config: 'Configuración y respaldo',
 };
 
 function closeMenu() {
