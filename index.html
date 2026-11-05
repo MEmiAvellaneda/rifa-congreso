@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bono Contribución - Viaje Académico 2027</title>
-  <link rel="stylesheet" href="styles.css?v=20261105c">
+  <link rel="stylesheet" href="styles.css?v=20261106a">
 </head>
 <body>
   <header class="hero" data-view="inicio">
@@ -121,8 +121,8 @@
           <small id="f-total" class="hint">Elegí los números: se calcula solo (cada 3 números cuestan $10.000).</small>
         </label>
         <label>Comprobante de pago (obligatorio)
-          <input type="file" id="f-proof" accept="image/*" required>
-          <small class="hint">Foto o captura de la transferencia o pago. Sin comprobante no se registra la venta.</small>
+          <input type="file" id="f-proof" accept="image/*,application/pdf,.pdf" required>
+          <small class="hint">Foto, captura o PDF de la transferencia o pago (si es PDF se usa la primera hoja). Sin comprobante no se registra la venta.</small>
         </label>
         <p id="proof-check" class="proof-check" hidden></p>
         <p id="form-msg" class="msg" role="status"></p>
@@ -233,7 +233,7 @@
           </label>
         </div>
         <label>Comprobante o foto (opcional)
-          <input type="file" id="g-proof" accept="image/*">
+          <input type="file" id="g-proof" accept="image/*,application/pdf,.pdf">
         </label>
         <p id="g-msg" class="msg" role="status"></p>
         <button type="submit" class="primary">Guardar gasto</button>
@@ -376,6 +376,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=20261105c"></script>
+  <script type="module" src="app.js?v=20261106a"></script>
 </body>
 </html>

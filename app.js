@@ -1056,6 +1056,54 @@ function textHasAmount(text, amount) {
   return re.test(text);
 }
 
+// Comprobantes en PDF: se usa la primera hoja como imagen, así se lee, se guarda y se ve igual que una foto.
+let pdfLib;
+function loadPdfJs() {
+  const base = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  pdfLib ||= new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = base + 'pdf.min.js';
+    sc.onload = async () => {
+      try {
+        // el lector corre en un Worker: se baja el archivo y se arma localmente (un Worker no puede cargarse desde otro dominio)
+        const code = await (await fetch(base + 'pdf.worker.min.js')).blob();
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(code);
+        resolve(window.pdfjsLib);
+      } catch (err) { pdfLib = null; reject(err); }
+    };
+    sc.onerror = () => { pdfLib = null; reject(new Error('sin conexión al lector de PDF')); };
+    document.head.appendChild(sc);
+  });
+  return pdfLib;
+}
+
+const isPdf = (file) => file && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name));
+const isProofFile = (file) => file && (file.type.startsWith('image/') || isPdf(file));
+const asImageCache = new WeakMap();
+// Devuelve el archivo tal cual si ya es una imagen; si es un PDF, una imagen JPG de su primera hoja
+function asImage(file) {
+  if (!isPdf(file)) return Promise.resolve(file);
+  if (!asImageCache.has(file)) {
+    asImageCache.set(file, (async () => {
+      const lib = await loadPdfJs();
+      const pdf = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+      const page = await pdf.getPage(1);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: Math.min(3, 1800 / Math.max(base.width, base.height)) });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      const g = canvas.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: g, viewport }).promise;
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
+      return new File([blob], file.name.replace(/\.pdf$/i, '') + '.jpg', { type: 'image/jpeg' });
+    })());
+  }
+  return asImageCache.get(file);
+}
+
 // El comprobante adjunto: { file, promise, amounts, failed }
 let proofOcr = null;
 
@@ -1085,7 +1133,7 @@ function readProof(file) {
   proofOcr = current;
   current.promise = (async () => {
     try {
-      const canvas = await imageForOcr(file);
+      const canvas = await imageForOcr(await asImage(file));
       current.text = await recognizeText(canvas);
       current.amounts = amountsIn(current.text);
       if (!current.amounts.length) {
@@ -1139,7 +1187,7 @@ function showProofCheck() {
 $('f-numbers').addEventListener('input', () => updateTotal());
 $('f-proof').addEventListener('change', () => {
   const file = $('f-proof').files[0];
-  if (file && file.type.startsWith('image/')) readProof(file); else { proofOcr = null; showProofCheck(); }
+  if (isProofFile(file)) readProof(file); else { proofOcr = null; showProofCheck(); }
 });
 
 $('f-student').addEventListener('input', () => { picked.clear(); $('f-filter').value = ''; renderChips(); updateTotal(); });
@@ -1190,7 +1238,7 @@ $('sale-form').addEventListener('submit', async (e) => {
   // Sin comprobante no hay venta
   const file = $('f-proof').files[0];
   if (!file) return setMsg(msg, 'Adjuntá el comprobante de pago: sin comprobante no se registra la venta.', 'error');
-  if (!file.type.startsWith('image/')) return setMsg(msg, 'El comprobante tiene que ser una foto o captura de pantalla.', 'error');
+  if (!isProofFile(file)) return setMsg(msg, 'El comprobante tiene que ser una foto, una captura o un PDF.', 'error');
 
   // Monto de la venta: lo fija la promoción (grupos de 3) y se reparte entre los números
   const amount = totalFor(numbers.length);
@@ -1211,7 +1259,7 @@ $('sale-form').addEventListener('submit', async (e) => {
   setMsg(msg, 'Guardando…');
   const proofId = 'c' + Date.now();
   try {
-    await putProof(proofId, await compressImage(file));
+    await putProof(proofId, await compressImage(await asImage(file)));
     const now = Date.now();
     // La transacción evita que dos personas vendan el mismo número a la vez
     await runTransaction(db, async (tx) => {
@@ -1623,7 +1671,7 @@ $('expense-form').addEventListener('submit', async (e) => {
   if (!Number.isFinite(amount) || amount < 1) return setMsg(msg, 'Poné un monto mayor a 0.', 'error');
   if (!date) return setMsg(msg, 'Falta la fecha.', 'error');
   const file = $('g-proof').files[0];
-  if (file && !file.type.startsWith('image/')) return setMsg(msg, 'El comprobante tiene que ser una foto o captura.', 'error');
+  if (file && !isProofFile(file)) return setMsg(msg, 'El comprobante tiene que ser una foto, una captura o un PDF.', 'error');
 
   const submit = e.submitter || e.target.querySelector('button[type=submit]');
   submit.disabled = true;
@@ -1631,7 +1679,7 @@ $('expense-form').addEventListener('submit', async (e) => {
   const id = 'g' + Date.now();
   const proofId = file ? 'g' + id : '';
   try {
-    if (file) await putProof(proofId, await compressImage(file));
+    if (file) await putProof(proofId, await compressImage(await asImage(file)));
     await setDoc(doc(db, 'expenses', id), {
       concept, amount, date, paidBy: $('g-by').value.trim(), proofId, ts: Date.now(), by: auth.currentUser.email,
     });
