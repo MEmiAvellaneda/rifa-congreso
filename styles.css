@@ -190,6 +190,8 @@ button.muted { color: var(--muted); }
 
 #d-proof { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto 16px; border: 1px solid var(--border); border-radius: 8px; }
 #d-proof[hidden] { display: none; }
+#g-img { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto 16px; border: 1px solid var(--border); border-radius: 8px; }
+#g-img[hidden] { display: none; }
 input[type=file] { width: 100%; margin-top: 4px; font: inherit; }
 
 /* ---- Ingreso ---- */
@@ -315,3 +317,23 @@ input[type=tel] { width: 100%; margin-top: 4px; padding: 9px 10px; border: 1px s
 
 input.calculado { background: #f5f5f4; font-weight: 700; color: #18181b; cursor: default; }
 td a { color: var(--brand); font-weight: 600; text-decoration: underline; }
+
+/* Menú desplegable: cada tema se ve en su propia pantalla */
+.topnav { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: #fff; border-bottom: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0, 0, 0, .06); }
+.topnav #view-title { font-size: 1.05rem; }
+#menu-btn { font-weight: 700; padding: 8px 16px; min-height: 44px; }
+#menu-list { position: absolute; top: 100%; left: 0; right: 0; margin: 0; padding: 10px; list-style: none; background: #fff; border-bottom: 1px solid var(--border); box-shadow: 0 14px 24px rgba(0, 0, 0, .16); display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px; max-height: 80vh; overflow-y: auto; }
+#menu-list li { margin: 0; }
+#menu-list button { width: 100%; min-height: 48px; text-align: left; font-size: 1rem; }
+#menu-list button.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* En pantallas anchas: el menú se alinea con el contenido y los gráficos no se estiran de más */
+@media (min-width: 1000px) {
+  .topnav { padding-left: calc((100% - 1100px) / 2 + 16px); padding-right: calc((100% - 1100px) / 2 + 16px); }
+  #menu-list { padding-left: calc((100% - 1100px) / 2 + 16px); padding-right: calc((100% - 1100px) / 2 + 16px); }
+  .chart svg { max-width: 760px; margin: 0 auto; }
+}
+
+/* Campo de fecha (Gastos): igual que los demás campos */
+input[type=date] { width: 100%; margin-top: 4px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: #fff; }
+@media (max-width: 600px) { input[type=date] { font-size: 16px; padding: 11px 10px; } }

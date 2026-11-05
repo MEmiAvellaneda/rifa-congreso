@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="hero">
+  <header class="hero" data-view="inicio">
     <img src="logo.png" class="logo" alt="40 años - Ingeniería en Sistemas de Información - UTN FRT" onerror="this.hidden = true">
     <div>
       <h1>Bono Contribución</h1>
@@ -16,15 +16,33 @@
     </div>
   </header>
 
+  <nav class="topnav" id="topnav" aria-label="Menú principal">
+    <button type="button" id="menu-btn" aria-expanded="false" aria-controls="menu-list">☰ Menú</button>
+    <strong id="view-title">Inicio</strong>
+    <ul id="menu-list" hidden>
+      <li><button type="button" data-go="inicio">🏠 Inicio</button></li>
+      <li><button type="button" data-go="alumnos">👥 Alumnos y números</button></li>
+      <li><button type="button" data-go="venta">🧾 Registrar venta</button></li>
+      <li><button type="button" data-go="ventas">📋 Ventas registradas</button></li>
+      <li><button type="button" data-go="gastos">💸 Gastos</button></li>
+      <li><button type="button" data-go="grilla">🔢 Grilla de números</button></li>
+      <li><button type="button" data-go="publicidad">📣 Publicidad y premios</button></li>
+      <li><button type="button" data-go="config">⚙️ Configuración y respaldo</button></li>
+      <li><button type="button" id="menu-logout">🚪 Salir</button></li>
+    </ul>
+  </nav>
+
   <main>
     <!-- Resumen -->
-    <section class="card" aria-labelledby="t-resumen">
+    <section class="card" data-view="inicio" aria-labelledby="t-resumen">
       <h2 id="t-resumen">Resumen</h2>
       <div class="stats">
         <div class="stat"><span id="st-vendidos">0</span><small>Vendidos</small></div>
         <div class="stat"><span id="st-asignados">0</span><small>Asignados sin vender</small></div>
         <div class="stat"><span id="st-libres">10000</span><small>Sin asignar</small></div>
         <div class="stat"><span id="st-cobrado">$0</span><small>Recaudado</small></div>
+        <div class="stat"><span id="st-gastos">$0</span><small>Gastos</small></div>
+        <div class="stat"><span id="st-neta">$0</span><small>Ganancia neta</small></div>
       </div>
 
       <div class="bar-label"><span>Números vendidos</span><span id="lbl-sold"></span></div>
@@ -32,16 +50,10 @@
       <div class="bar-label"><span>Meta de recaudación</span><span id="lbl-goal"></span></div>
       <div class="progress" aria-hidden="true"><div id="bar-goal" class="fill goal"></div></div>
 
-      <div class="settings">
-        <p class="price-fixed">Precio por número: <strong>$4.000</strong></p>
-        <label class="inline">Meta de recaudación ($)
-          <input type="number" id="goal" min="0" step="1" value="0">
-        </label>
-      </div>
     </section>
 
     <!-- Gráficos -->
-    <section class="card" aria-labelledby="t-graficos">
+    <section class="card" data-view="inicio" aria-labelledby="t-graficos">
       <h2 id="t-graficos">Gráficos de recaudación</h2>
       <h3>Evolución acumulada</h3>
       <div id="chart-line" class="chart"></div>
@@ -50,7 +62,7 @@
     </section>
 
     <!-- Alumnos -->
-    <section class="card" aria-labelledby="t-alumnos">
+    <section class="card" data-view="alumnos" aria-labelledby="t-alumnos">
       <h2 id="t-alumnos">Alumnos y números asignados</h2>
       <form id="student-form" class="row-form" autocomplete="off">
         <label>Nombre del alumno/a
@@ -73,7 +85,7 @@
     </section>
 
     <!-- Registrar venta -->
-    <section class="card" aria-labelledby="t-venta">
+    <section class="card" data-view="venta" aria-labelledby="t-venta">
       <h2 id="t-venta">Registrar venta</h2>
       <form id="sale-form" autocomplete="off">
         <label>¿Quién vendió?
@@ -122,7 +134,7 @@
     </section>
 
     <!-- Datos de la imagen de publicidad -->
-    <section class="card" aria-labelledby="t-publicidad">
+    <section class="card" data-view="publicidad" aria-labelledby="t-publicidad">
       <h2 id="t-publicidad">Datos para la publicidad</h2>
       <p class="hint">Estos textos salen en la imagen para compartir. Los que dejes vacíos no se muestran.</p>
       <div class="row-form">
@@ -155,7 +167,7 @@
     </section>
 
     <!-- Premios -->
-    <section class="card" aria-labelledby="t-premios">
+    <section class="card" data-view="publicidad" aria-labelledby="t-premios">
       <h2 id="t-premios">Premios y ganadores</h2>
       <p class="hint">El sorteo se hace por la quiniela. Cargá cada premio y, cuando salga, el número ganador para ver a quién corresponde.</p>
       <div id="prizes"></div>
@@ -163,7 +175,7 @@
     </section>
 
     <!-- Grilla -->
-    <section class="card" aria-labelledby="t-grilla">
+    <section class="card" data-view="grilla" aria-labelledby="t-grilla">
       <h2 id="t-grilla">Grilla de números</h2>
       <div class="grid-controls">
         <button type="button" id="blk-prev" aria-label="Bloque anterior">‹</button>
@@ -182,7 +194,7 @@
     </section>
 
     <!-- Lista -->
-    <section class="card" aria-labelledby="t-lista">
+    <section class="card" data-view="ventas" aria-labelledby="t-lista">
       <h2 id="t-lista">Ventas registradas</h2>
       <div class="list-controls">
         <input type="search" id="filter" placeholder="Buscar por número, nombre o celular">
@@ -198,16 +210,67 @@
       <p id="list-note" class="hint"></p>
     </section>
 
+    <!-- Gastos -->
+    <section class="card" data-view="gastos" aria-labelledby="t-gastos">
+      <h2 id="t-gastos">Gastos</h2>
+      <p class="hint">Anotá lo que se va gastando (impresiones, premios, comisiones…). Se descuenta de lo recaudado para ver la ganancia neta.</p>
+      <form id="expense-form" autocomplete="off">
+        <div class="row-form">
+          <label>Concepto
+            <input type="text" id="g-concept" maxlength="80" placeholder="Ej: Impresión de afiches" required>
+          </label>
+          <label>Monto ($)
+            <input type="number" id="g-amount" inputmode="numeric" min="1" step="1" placeholder="Ej: 15000" required>
+          </label>
+        </div>
+        <div class="row-form">
+          <label>Fecha
+            <input type="date" id="g-date" required>
+          </label>
+          <label>¿Quién lo pagó? (opcional)
+            <input type="text" id="g-by" maxlength="60" placeholder="Ej: Emilia">
+          </label>
+        </div>
+        <label>Comprobante o foto (opcional)
+          <input type="file" id="g-proof" accept="image/*">
+        </label>
+        <p id="g-msg" class="msg" role="status"></p>
+        <button type="submit" class="primary">Guardar gasto</button>
+      </form>
+      <div class="table-wrap top-gap">
+        <table>
+          <thead>
+            <tr><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Pagó</th><th></th></tr>
+          </thead>
+          <tbody id="expenses-body"></tbody>
+        </table>
+      </div>
+      <p id="g-total" class="hint"></p>
+    </section>
+
+    <!-- Configuración -->
+    <section class="card" data-view="config" aria-labelledby="t-config">
+      <h2 id="t-config">Configuración</h2>
+      <div class="settings">
+        <p class="price-fixed">Precio por número: <strong>$4.000</strong></p>
+        <label class="inline">Meta de recaudación ($)
+          <input type="number" id="goal" min="0" step="1" value="0">
+        </label>
+      </div>
+
+    </section>
+
     <!-- Respaldo -->
-    <section class="card" aria-labelledby="t-respaldo">
+    <section class="card" data-view="config" aria-labelledby="t-respaldo">
       <h2 id="t-respaldo">Copia de seguridad</h2>
       <div class="btn-row">
         <button type="button" id="btn-csv">Exportar ventas (CSV)</button>
+        <button type="button" id="btn-csv-gastos">Exportar gastos (CSV)</button>
         <button type="button" id="btn-backup">Descargar respaldo</button>
         <button type="button" id="btn-restore">Restaurar respaldo</button>
         <input type="file" id="file-restore" accept="application/json" hidden>
       </div>
-      <small class="hint">Los datos se guardan solo en este navegador. Descargá un respaldo seguido.</small>
+      <small class="hint">Los datos se guardan en la nube y los ven todos los que ingresan. Descargá un respaldo de vez en cuando.</small>
     </section>
   </main>
 
@@ -220,6 +283,18 @@
       <button type="button" id="d-edit">Editar comprador</button>
       <button type="button" id="d-delete" class="danger">Eliminar venta</button>
       <button type="button" id="d-close">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Detalle de gasto -->
+  <dialog id="expense-detail">
+    <h3 id="g-title"></h3>
+    <dl id="g-info"></dl>
+    <img id="g-img" alt="Comprobante del gasto" hidden>
+    <div class="btn-row">
+      <button type="button" id="g-edit">Editar</button>
+      <button type="button" id="g-delete" class="danger">Eliminar gasto</button>
+      <button type="button" id="g-close">Cerrar</button>
     </div>
   </dialog>
 

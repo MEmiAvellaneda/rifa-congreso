@@ -51,7 +51,7 @@ const defaultAd = () => ({
   about: 'A beneficio del Viaje Académico y de Inmersión Tecnológica 2027: Tech Show London e IBM Quantum Spain. ¡Tu colaboración nos acerca a nuestro sueño!',
 });
 
-const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, reservations: {}, prizeImages: {} };
+const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, reservations: {}, expenses: {}, prizeImages: {} };
 let currentBlock = 0;
 const picked = new Set(); // números tocados en el formulario de venta
 
@@ -238,6 +238,8 @@ $('student-form').addEventListener('submit', async (e) => {
 
 /* ---------- Render: resumen ---------- */
 
+const totalSpent = () => Object.values(state.expenses).reduce((t, g) => t + (Number(g.amount) || 0), 0);
+
 function renderStats() {
   const sales = Object.values(state.sales);
   const collected = sales.reduce((t, s) => t + priceOf(s), 0);
@@ -249,6 +251,9 @@ function renderStats() {
   $('st-asignados').textContent = assignedUnsold;
   $('st-libres').textContent = TOTAL - used.size;
   $('st-cobrado').textContent = money(collected);
+  const spent = totalSpent();
+  $('st-gastos').textContent = money(spent);
+  $('st-neta').textContent = (collected < spent ? '-' : '') + money(Math.abs(collected - spent));
 
   $('bar-sold').style.width = (sales.length / TOTAL * 100) + '%';
   $('lbl-sold').textContent = `${sales.length} de ${TOTAL}`;
@@ -1576,6 +1581,131 @@ $('d-edit').addEventListener('click', async () => {
 
 $('d-close').addEventListener('click', () => $('detail').close());
 
+/* ---------- Gastos ---------- */
+
+// La fecha se guarda como AAAA-MM-DD y se muestra como DD/MM/AAAA
+const fmtDay = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
+const today = () => new Date().toLocaleDateString('sv-SE');
+$('g-date').value = today();
+
+function renderExpenses() {
+  const body = $('expenses-body');
+  body.textContent = '';
+  const ids = Object.keys(state.expenses).sort((a, b) =>
+    (state.expenses[b].date || '').localeCompare(state.expenses[a].date || '') || (state.expenses[b].ts || 0) - (state.expenses[a].ts || 0));
+  for (const id of ids) {
+    const g = state.expenses[id];
+    const tr = el('tr');
+    [fmtDay(g.date), g.concept, money(g.amount), g.paidBy || '—'].forEach((v, i) => {
+      const td = el('td', {}, v);
+      td.dataset.label = ['Fecha', 'Concepto', 'Monto', 'Pagó'][i];
+      tr.append(td);
+    });
+    const tdAct = el('td');
+    const view = el('button', { type: 'button' }, 'Ver');
+    view.dataset.id = id;
+    tdAct.append(view);
+    tr.append(tdAct);
+    body.append(tr);
+  }
+  $('g-total').textContent = ids.length
+    ? `${ids.length} gasto${ids.length > 1 ? 's' : ''} · Total gastado: ${money(totalSpent())}`
+    : 'Todavía no hay gastos cargados.';
+}
+
+$('expense-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('g-msg');
+  const concept = $('g-concept').value.trim();
+  const amount = Math.round(Number($('g-amount').value));
+  const date = $('g-date').value;
+  if (!concept) return setMsg(msg, 'Falta el concepto.', 'error');
+  if (!Number.isFinite(amount) || amount < 1) return setMsg(msg, 'Poné un monto mayor a 0.', 'error');
+  if (!date) return setMsg(msg, 'Falta la fecha.', 'error');
+  const file = $('g-proof').files[0];
+  if (file && !file.type.startsWith('image/')) return setMsg(msg, 'El comprobante tiene que ser una foto o captura.', 'error');
+
+  const submit = e.submitter || e.target.querySelector('button[type=submit]');
+  submit.disabled = true;
+  setMsg(msg, 'Guardando…');
+  const id = 'g' + Date.now();
+  const proofId = file ? 'g' + id : '';
+  try {
+    if (file) await putProof(proofId, await compressImage(file));
+    await setDoc(doc(db, 'expenses', id), {
+      concept, amount, date, paidBy: $('g-by').value.trim(), proofId, ts: Date.now(), by: auth.currentUser.email,
+    });
+  } catch (err) {
+    if (proofId) deleteProof(proofId).catch(() => {});
+    submit.disabled = false;
+    return setMsg(msg, 'No se guardó el gasto: ' + err.message, 'error');
+  }
+  submit.disabled = false;
+  $('g-concept').value = '';
+  $('g-amount').value = '';
+  $('g-by').value = '';
+  $('g-proof').value = '';
+  setMsg(msg, `Gasto guardado: ${concept} (${money(amount)})`, 'ok');
+});
+
+let expenseNum = null;
+function openExpense(id) {
+  const g = state.expenses[id];
+  if (!g) return;
+  expenseNum = id;
+  $('g-title').textContent = g.concept;
+  const info = $('g-info');
+  info.textContent = '';
+  [['Monto', money(g.amount)], ['Fecha', fmtDay(g.date)], ['Pagó', g.paidBy || '—'], ['Registrado por', g.by || '—'],
+    ['Comprobante', g.proofId ? 'Adjunto' : 'Sin comprobante']].forEach(([label, value]) => info.append(el('dt', {}, label), el('dd', {}, value)));
+  const img = $('g-img');
+  img.hidden = true;
+  img.removeAttribute('src');
+  if (g.proofId) {
+    getProof(g.proofId).then((url) => { if (url && expenseNum === id) { img.src = url; img.hidden = false; } }).catch(() => {});
+  }
+  if (!$('expense-detail').open) $('expense-detail').showModal();
+}
+
+$('expenses-body').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-id]');
+  if (btn) openExpense(btn.dataset.id);
+});
+
+$('g-edit').addEventListener('click', async () => {
+  const id = expenseNum;
+  const g = state.expenses[id];
+  if (!g) return;
+  const concept = prompt('Concepto:', g.concept);
+  if (concept === null) return;
+  const amountText = prompt('Monto ($):', String(g.amount));
+  if (amountText === null) return;
+  const amount = Math.round(Number(amountText.replace(/[^\d.]/g, '')));
+  if (!concept.trim()) return alert('Falta el concepto.');
+  if (!Number.isFinite(amount) || amount < 1) return alert('Poné un monto mayor a 0.');
+  try {
+    await setDoc(doc(db, 'expenses', id), { concept: concept.trim(), amount }, { merge: true });
+  } catch (err) {
+    return showError(err);
+  }
+  openExpense(id);
+});
+
+$('g-delete').addEventListener('click', async () => {
+  const id = expenseNum;
+  const g = state.expenses[id];
+  if (!g || !confirm(`¿Eliminar el gasto "${g.concept}" (${money(g.amount)})?`)) return;
+  try {
+    await deleteDoc(doc(db, 'expenses', id));
+    if (g.proofId) await deleteProof(g.proofId);
+  } catch (err) {
+    showError(err);
+  }
+  $('expense-detail').close();
+});
+
+$('g-close').addEventListener('click', () => $('expense-detail').close());
+
 /* ---------- Exportar / respaldo ---------- */
 
 $('btn-csv').addEventListener('click', () => {
@@ -1589,11 +1719,20 @@ $('btn-csv').addEventListener('click', () => {
   download('bono-ventas.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 });
 
+$('btn-csv-gastos').addEventListener('click', () => {
+  const quote = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = ['Fecha,Concepto,Monto,Pago,Comprobante,Registrado por'];
+  for (const g of Object.values(state.expenses).sort((a, b) => (a.date || '').localeCompare(b.date || ''))) {
+    lines.push([fmtDay(g.date), g.concept, g.amount, g.paidBy, g.proofId ? 'Si' : 'No', g.by].map(quote).join(','));
+  }
+  download('bono-gastos.csv', '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+});
+
 $('btn-backup').addEventListener('click', async () => {
   try {
     const data = {
       goal: state.goal, prizes: state.prizes, ad: state.ad,
-      students: state.students, sales: state.sales, proofs: await allProofs(),
+      students: state.students, sales: state.sales, expenses: state.expenses, proofs: await allProofs(),
     };
     download('bono-respaldo.json', JSON.stringify(data), 'application/json');
   } catch (e) {
@@ -1623,9 +1762,11 @@ $('file-restore').addEventListener('change', async () => {
     const ops = [];
     for (const n of Object.keys(state.sales)) ops.push((b) => b.delete(doc(db, 'sales', n)));
     for (const id of Object.keys(state.students)) ops.push((b) => b.delete(doc(db, 'students', id)));
+    for (const id of Object.keys(state.expenses)) ops.push((b) => b.delete(doc(db, 'expenses', id)));
     for (const id of oldProofs) ops.push((b) => b.delete(doc(db, 'proofs', id)));
     for (const [n, s] of Object.entries(data.sales)) ops.push((b) => b.set(doc(db, 'sales', n), s));
     for (const [id, s] of Object.entries(data.students)) ops.push((b) => b.set(doc(db, 'students', id), s));
+    for (const [id, g] of Object.entries(data.expenses || {})) ops.push((b) => b.set(doc(db, 'expenses', id), g));
     for (const [id, url] of Object.entries(data.proofs || {})) ops.push((b) => b.set(doc(db, 'proofs', id), { data: url }));
     ops.push((b) => b.set(doc(db, 'config', 'main'), {
       goal: data.goal || 0, prizes: data.prizes || defaultPrizes(), ad: { ...defaultAd(), ...(data.ad || {}) },
@@ -1647,6 +1788,7 @@ function renderAll() {
   renderSaleForm();
   renderGrid();
   renderTable();
+  renderExpenses();
   if (!isEditing($('prizes'))) renderPrizes();
 }
 
@@ -1691,6 +1833,7 @@ function startListening() {
     watch('students', (data) => { state.students = data; }),
     watch('sales', (data) => { state.sales = data; }),
     watch('reservations', (data) => { state.reservations = data; }),
+    watch('expenses', (data) => { state.expenses = data; }),
     watch('prizeImages', (data) => {
       state.prizeImages = Object.fromEntries(Object.entries(data).map(([id, d]) => [id, d.data]));
     }),
@@ -1729,5 +1872,44 @@ function start() {
     startListening();
   });
 }
+
+/* ---------- Menú y vistas ---------- */
+
+const VIEWS = {
+  inicio: 'Inicio', alumnos: 'Alumnos y números', venta: 'Registrar venta', ventas: 'Ventas registradas',
+  gastos: 'Gastos', grilla: 'Grilla de números', publicidad: 'Publicidad y premios', config: 'Configuración y respaldo',
+};
+
+function closeMenu() {
+  $('menu-list').hidden = true;
+  $('menu-btn').setAttribute('aria-expanded', 'false');
+}
+
+// Muestra solo las secciones de la vista elegida; el gráfico se redibuja porque mide el ancho disponible
+function showView(name) {
+  if (!VIEWS[name]) name = 'inicio';
+  document.querySelectorAll('[data-view]').forEach((n) => { n.hidden = n.dataset.view !== name; });
+  $('view-title').textContent = VIEWS[name];
+  document.querySelectorAll('#menu-list button[data-go]').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
+  closeMenu();
+  window.scrollTo(0, 0);
+  scheduleRender();
+}
+
+$('menu-btn').addEventListener('click', () => {
+  const open = $('menu-list').hidden;
+  $('menu-list').hidden = !open;
+  $('menu-btn').setAttribute('aria-expanded', String(open));
+});
+$('menu-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  if (btn.id === 'menu-logout') { closeMenu(); return logout(); }
+  if (btn.dataset.go) location.hash = btn.dataset.go; // el botón "atrás" del celular vuelve a la vista anterior
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('#topnav')) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
+showView(location.hash.slice(1));
 
 start();
