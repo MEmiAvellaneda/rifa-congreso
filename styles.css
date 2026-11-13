@@ -387,3 +387,29 @@ label.sub input[type=checkbox] { width: 22px; height: 22px; flex: none; accent-c
 .sub-add button { padding: 6px 14px; }
 @media (max-width: 600px) { .sub-add input { font-size: 16px; } label.sub { padding: 10px; } .sub-del { padding: 6px 10px; } }
 #k-subs, #k-subs:focus { width: 100%; font: inherit; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; }
+
+/* Entradas */
+.e-totals { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.e-total { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.e-name { font-weight: 600; overflow-wrap: anywhere; }
+.e-qty { font-size: 1.4rem; }
+.e-minibar { grid-column: 1 / -1; height: 6px; background: #eceae6; border-radius: 99px; overflow: hidden; }
+.e-minifill { height: 100%; background: var(--brand); }
+#ticket-form .row-form { grid-template-columns: 2fr 1fr auto; }
+#ticket-form button { margin-bottom: 12px; }
+#e-bar-box { margin-top: 12px; }
+input[type=number]#e-qty, input[type=number]#e-total { width: 100%; }
+label.inline input#e-total { width: 140px; }
+@media (max-width: 600px) { #ticket-form .row-form { grid-template-columns: 1fr; } #ticket-form button { margin-bottom: 0; } .e-qty { font-size: 1.6rem; } }
+/* Entradas: los tres recuadros del resumen siempre en una fila */
+section[data-view="entradas"] .stats { grid-template-columns: repeat(3, 1fr); }
+section[data-view="entradas"] .stat span { font-size: 1.5rem; }
+@media (max-width: 600px) { section[data-view="entradas"] .stat { padding: 10px 6px; } section[data-view="entradas"] .stat small { font-size: .78rem; } }
+.e-minifill { background: #16a34a; }
+
+/* Resumen con bono y entradas separados; total y neto resaltados */
+.stat.neto { background: #ecfdf3; border: 1px solid #bbf7d0; }
+section[data-view="entradas"] .stats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.e-right { text-align: right; display: grid; justify-items: end; }
+.e-amount { color: var(--muted); font-size: .82rem; }
+@media (max-width: 600px) { section[data-view="entradas"] .stats { grid-template-columns: repeat(2, 1fr); } }

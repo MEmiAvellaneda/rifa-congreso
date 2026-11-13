@@ -51,7 +51,7 @@ const defaultAd = () => ({
   about: 'A beneficio del Viaje Académico y de Inmersión Tecnológica 2027: Tech Show London e IBM Quantum Spain. ¡Tu colaboración nos acerca a nuestro sueño!',
 });
 
-const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, reservations: {}, expenses: {}, tasks: {}, prizeImages: {} };
+const state = { goal: 0, prizes: defaultPrizes(), ad: defaultAd(), students: {}, sales: {}, reservations: {}, expenses: {}, tasks: {}, tickets: {}, ticketsTotal: 0, ticketsPrice: 5000, prizeImages: {} };
 let currentBlock = 0;
 const picked = new Set(); // números tocados en el formulario de venta
 
@@ -238,6 +238,9 @@ $('student-form').addEventListener('submit', async (e) => {
 
 /* ---------- Render: resumen ---------- */
 
+const TICKET_PRICE_DEFAULT = 5000; // entrada anticipada
+const ticketPriceOf = (t) => Number(t.price) || TICKET_PRICE_DEFAULT;
+const ticketsRevenue = () => Object.values(state.tickets).reduce((sum, t) => sum + (Number(t.qty) || 0) * ticketPriceOf(t), 0);
 const totalSpent = () => Object.values(state.expenses).reduce((t, g) => t + (Number(g.amount) || 0), 0);
 
 function renderStats() {
@@ -251,16 +254,21 @@ function renderStats() {
   $('st-asignados').textContent = assignedUnsold;
   $('st-libres').textContent = TOTAL - used.size;
   $('st-cobrado').textContent = money(collected);
+  // el neto suma el bono y las entradas de la peña, y descuenta los gastos
+  const entradas = ticketsRevenue();
+  const totalIn = collected + entradas;
   const spent = totalSpent();
+  $('st-entradas').textContent = money(entradas);
+  $('st-total').textContent = money(totalIn);
   $('st-gastos').textContent = money(spent);
-  $('st-neta').textContent = (collected < spent ? '-' : '') + money(Math.abs(collected - spent));
+  $('st-neta').textContent = (totalIn < spent ? '-' : '') + money(Math.abs(totalIn - spent));
 
   $('bar-sold').style.width = (sales.length / TOTAL * 100) + '%';
   $('lbl-sold').textContent = `${sales.length} de ${TOTAL}`;
-  const goalPct = state.goal > 0 ? Math.min(100, collected / state.goal * 100) : 0;
+  const goalPct = state.goal > 0 ? Math.min(100, totalIn / state.goal * 100) : 0;
   $('bar-goal').style.width = goalPct + '%';
   $('lbl-goal').textContent = state.goal > 0
-    ? `${money(collected)} de ${money(state.goal)} (${Math.round(goalPct)}%)`
+    ? `${money(totalIn)} de ${money(state.goal)} (${Math.round(goalPct)}%)`
     : 'Definí una meta para ver el avance';
 }
 
@@ -1754,6 +1762,143 @@ $('g-delete').addEventListener('click', async () => {
 
 $('g-close').addEventListener('click', () => $('expense-detail').close());
 
+/* ---------- Entradas (pulseras de la peña) ---------- */
+
+const sellerKey = (name) => name.trim().toLowerCase();
+
+// Total por vendedor (sin distinguir mayúsculas), del que más vendió al que menos
+function ticketTotals() {
+  const map = new Map();
+  for (const t of Object.values(state.tickets)) {
+    const key = sellerKey(t.seller || '');
+    if (!key) continue;
+    const row = map.get(key) || { name: t.seller.trim(), qty: 0, amount: 0 };
+    row.qty += Number(t.qty) || 0;
+    row.amount += (Number(t.qty) || 0) * ticketPriceOf(t);
+    map.set(key, row);
+  }
+  return [...map.values()].sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, 'es'));
+}
+
+function renderTickets() {
+  const totals = ticketTotals();
+  const sold = totals.reduce((t, r) => t + r.qty, 0);
+  const total = state.ticketsTotal;
+  $('e-vendidas').textContent = sold;
+  $('e-vendedores').textContent = totals.length;
+  $('e-recaudado').textContent = money(ticketsRevenue());
+  $('e-quedan-box').hidden = !(total > 0);
+  $('e-quedan').textContent = Math.max(0, total - sold);
+  $('e-bar-box').hidden = !(total > 0);
+  if (total > 0) {
+    $('e-bar').style.width = Math.min(100, sold / total * 100) + '%';
+    $('e-lbl').textContent = `${sold} de ${total}${sold > total ? ' (se pasó del total)' : ''}`;
+  }
+  if (document.activeElement !== $('e-total')) $('e-total').value = total || '';
+  if (document.activeElement !== $('e-price')) $('e-price').value = state.ticketsPrice;
+
+  // sugerencias: alumnos y quienes ya vendieron
+  const names = [...new Set([...Object.values(state.students).map((s) => s.name), ...totals.map((r) => r.name)])].sort((a, b) => a.localeCompare(b, 'es'));
+  const list = $('e-sellers');
+  list.textContent = '';
+  names.forEach((n) => list.append(el('option', { value: n })));
+
+  // por vendedor, con barra relativa al que más vendió
+  const ul = $('e-totals');
+  ul.textContent = '';
+  const max = Math.max(1, ...totals.map((r) => r.qty));
+  for (const r of totals) {
+    const li = el('li', { className: 'e-total' });
+    const right = el('div', { className: 'e-right' });
+    right.append(el('b', { className: 'e-qty' }, String(r.qty)), el('small', { className: 'e-amount' }, money(r.amount)));
+    li.append(el('span', { className: 'e-name' }, r.name), right);
+    const bar = el('div', { className: 'e-minibar' });
+    bar.append(el('div', { className: 'e-minifill' }));
+    bar.firstChild.style.width = Math.round(r.qty / max * 100) + '%';
+    li.append(bar);
+    ul.append(li);
+  }
+  if (!totals.length) ul.append(el('li', { className: 'hint' }, 'Todavía no se vendió ninguna entrada.'));
+
+  // movimientos, del más nuevo al más viejo
+  const body = $('tickets-body');
+  body.textContent = '';
+  const ids = Object.keys(state.tickets).sort((a, b) => (state.tickets[b].ts || 0) - (state.tickets[a].ts || 0));
+  for (const id of ids) {
+    const t = state.tickets[id];
+    const tr = el('tr');
+    [fmtDate(t.ts), t.seller, String(t.qty), money((Number(t.qty) || 0) * ticketPriceOf(t))].forEach((v, i) => {
+      const td = el('td', {}, v);
+      td.dataset.label = ['Fecha', 'Vendedor/a', 'Cantidad', 'Importe'][i];
+      tr.append(td);
+    });
+    const tdAct = el('td');
+    const edit = el('button', { type: 'button' }, 'Editar');
+    edit.dataset.id = id; edit.dataset.act = 'edit';
+    const del = el('button', { type: 'button', className: 'danger' }, 'Borrar');
+    del.dataset.id = id; del.dataset.act = 'del';
+    tdAct.append(edit, ' ', del);
+    tr.append(tdAct);
+    body.append(tr);
+  }
+  $('e-count').textContent = ids.length ? `${ids.length} movimiento${ids.length > 1 ? 's' : ''}` : '';
+}
+
+$('ticket-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('e-msg');
+  const seller = $('e-seller').value.trim();
+  const qty = Math.round(Number($('e-qty').value));
+  if (!seller) return setMsg(msg, 'Falta el nombre de quien vendió.', 'error');
+  if (!Number.isFinite(qty) || qty < 1) return setMsg(msg, 'Poné una cantidad de 1 o más.', 'error');
+  // si ya existe con otras mayúsculas, se usa el nombre ya cargado
+  const known = ticketTotals().find((r) => sellerKey(r.name) === sellerKey(seller));
+  try {
+    await setDoc(doc(db, 'tickets', 'e' + Date.now()), { seller: known ? known.name : seller, qty, price: state.ticketsPrice || TICKET_PRICE_DEFAULT, ts: Date.now(), by: auth.currentUser.email });
+  } catch (err) {
+    return showError(err);
+  }
+  $('e-qty').value = '';
+  setMsg(msg, `Sumadas ${qty} entrada${qty > 1 ? 's' : ''} a ${known ? known.name : seller} (${money(qty * (state.ticketsPrice || TICKET_PRICE_DEFAULT))}).`, 'ok');
+  $('e-qty').focus();
+});
+
+$('e-price').addEventListener('change', async () => {
+  const price = Math.round(Number($('e-price').value) || 0);
+  if (price < 1) { $('e-price').value = state.ticketsPrice; return; }
+  try {
+    await setDoc(doc(db, 'config', 'entradas'), { price }, { merge: true });
+  } catch (err) {
+    showError(err);
+  }
+});
+
+$('e-total').addEventListener('change', async () => {
+  const total = Math.max(0, Math.round(Number($('e-total').value) || 0));
+  try {
+    await setDoc(doc(db, 'config', 'entradas'), { total }, { merge: true });
+  } catch (err) {
+    showError(err);
+  }
+});
+
+$('tickets-body').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const t = state.tickets[id];
+  if (!t) return;
+  if (btn.dataset.act === 'del') {
+    if (!confirm(`¿Borrar este movimiento? (${t.seller}: ${t.qty})`)) return;
+    return deleteDoc(doc(db, 'tickets', id)).catch(showError);
+  }
+  const text = prompt(`Cantidad para ${t.seller}:`, String(t.qty));
+  if (text === null) return;
+  const qty = Math.round(Number(text));
+  if (!Number.isFinite(qty) || qty < 1) return alert('Poné una cantidad de 1 o más.');
+  setDoc(doc(db, 'tickets', id), { qty }, { merge: true }).catch(showError);
+});
+
 /* ---------- Tareas ---------- */
 
 const TASK_STATES = [
@@ -1994,6 +2139,13 @@ $('btn-csv').addEventListener('click', () => {
   download('bono-ventas.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 });
 
+$('btn-csv-entradas').addEventListener('click', () => {
+  const quote = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = ['Vendedor,Entradas vendidas,Recaudado'];
+  for (const r of ticketTotals()) lines.push([r.name, r.qty, r.amount].map(quote).join(','));
+  download('bono-entradas.csv', '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+});
+
 $('btn-csv-gastos').addEventListener('click', () => {
   const quote = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const lines = ['Fecha,Concepto,Monto,Pago,Comprobante,Registrado por'];
@@ -2007,7 +2159,7 @@ $('btn-backup').addEventListener('click', async () => {
   try {
     const data = {
       goal: state.goal, prizes: state.prizes, ad: state.ad,
-      students: state.students, sales: state.sales, expenses: state.expenses, tasks: state.tasks, proofs: await allProofs(),
+      students: state.students, sales: state.sales, expenses: state.expenses, tasks: state.tasks, tickets: state.tickets, ticketsTotal: state.ticketsTotal, ticketsPrice: state.ticketsPrice, proofs: await allProofs(),
     };
     download('bono-respaldo.json', JSON.stringify(data), 'application/json');
   } catch (e) {
@@ -2039,11 +2191,14 @@ $('file-restore').addEventListener('change', async () => {
     for (const id of Object.keys(state.students)) ops.push((b) => b.delete(doc(db, 'students', id)));
     for (const id of Object.keys(state.expenses)) ops.push((b) => b.delete(doc(db, 'expenses', id)));
     for (const id of Object.keys(state.tasks)) ops.push((b) => b.delete(doc(db, 'tasks', id)));
+    for (const id of Object.keys(state.tickets)) ops.push((b) => b.delete(doc(db, 'tickets', id)));
     for (const id of oldProofs) ops.push((b) => b.delete(doc(db, 'proofs', id)));
     for (const [n, s] of Object.entries(data.sales)) ops.push((b) => b.set(doc(db, 'sales', n), s));
     for (const [id, s] of Object.entries(data.students)) ops.push((b) => b.set(doc(db, 'students', id), s));
     for (const [id, g] of Object.entries(data.expenses || {})) ops.push((b) => b.set(doc(db, 'expenses', id), g));
     for (const [id, t] of Object.entries(data.tasks || {})) ops.push((b) => b.set(doc(db, 'tasks', id), t));
+    for (const [id, t] of Object.entries(data.tickets || {})) ops.push((b) => b.set(doc(db, 'tickets', id), t));
+    if (data.ticketsTotal || data.ticketsPrice) ops.push((b) => b.set(doc(db, 'config', 'entradas'), { total: data.ticketsTotal || 0, price: data.ticketsPrice || TICKET_PRICE_DEFAULT }));
     for (const [id, url] of Object.entries(data.proofs || {})) ops.push((b) => b.set(doc(db, 'proofs', id), { data: url }));
     ops.push((b) => b.set(doc(db, 'config', 'main'), {
       goal: data.goal || 0, prizes: data.prizes || defaultPrizes(), ad: { ...defaultAd(), ...(data.ad || {}) },
@@ -2067,6 +2222,7 @@ function renderAll() {
   renderTable();
   renderExpenses();
   renderTasks();
+  renderTickets();
   if (!isEditing($('prizes'))) renderPrizes();
 }
 
@@ -2113,6 +2269,8 @@ function startListening() {
     watch('reservations', (data) => { state.reservations = data; }),
     watch('expenses', (data) => { state.expenses = data; }),
     watch('tasks', (data) => { state.tasks = data; }),
+    watch('tickets', (data) => { state.tickets = data; }),
+    onSnapshot(doc(db, 'config', 'entradas'), (snap) => { const d = snap.data() || {}; state.ticketsTotal = Number(d.total) || 0; state.ticketsPrice = Number(d.price) || TICKET_PRICE_DEFAULT; scheduleRender(); }, fail),
     watch('prizeImages', (data) => {
       state.prizeImages = Object.fromEntries(Object.entries(data).map(([id, d]) => [id, d.data]));
     }),
@@ -2156,7 +2314,7 @@ function start() {
 
 const VIEWS = {
   inicio: 'Inicio', alumnos: 'Alumnos y números', venta: 'Registrar venta', ventas: 'Ventas registradas',
-  gastos: 'Gastos', tareas: 'Tareas', grilla: 'Grilla de números', publicidad: 'Publicidad y premios', config: 'Configuración y respaldo',
+  gastos: 'Gastos', entradas: 'Entradas (pulseras)', tareas: 'Tareas', grilla: 'Grilla de números', publicidad: 'Publicidad y premios', config: 'Configuración y respaldo',
 };
 
 function closeMenu() {

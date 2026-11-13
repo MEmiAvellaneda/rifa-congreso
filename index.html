@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bono Contribución - Viaje Académico 2027</title>
-  <link rel="stylesheet" href="styles.css?v=20261106a">
+  <link rel="stylesheet" href="styles.css?v=20261113a">
 </head>
 <body>
   <header class="hero" data-view="inicio">
@@ -25,6 +25,7 @@
       <li><button type="button" data-go="venta">🧾 Registrar venta</button></li>
       <li><button type="button" data-go="ventas">📋 Ventas registradas</button></li>
       <li><button type="button" data-go="gastos">💸 Gastos</button></li>
+      <li><button type="button" data-go="entradas">🎟️ Entradas</button></li>
       <li><button type="button" data-go="tareas">✅ Tareas</button></li>
       <li><button type="button" data-go="grilla">🔢 Grilla de números</button></li>
       <li><button type="button" data-go="publicidad">📣 Publicidad y premios</button></li>
@@ -41,9 +42,11 @@
         <div class="stat"><span id="st-vendidos">0</span><small>Vendidos</small></div>
         <div class="stat"><span id="st-asignados">0</span><small>Asignados sin vender</small></div>
         <div class="stat"><span id="st-libres">10000</span><small>Sin asignar</small></div>
-        <div class="stat"><span id="st-cobrado">$0</span><small>Recaudado</small></div>
+        <div class="stat"><span id="st-cobrado">$0</span><small>Recaudado bono</small></div>
+        <div class="stat"><span id="st-entradas">$0</span><small>Entradas (peña)</small></div>
+        <div class="stat neto"><span id="st-total">$0</span><small>Total recaudado</small></div>
         <div class="stat"><span id="st-gastos">$0</span><small>Gastos</small></div>
-        <div class="stat"><span id="st-neta">$0</span><small>Ganancia neta</small></div>
+        <div class="stat neto"><span id="st-neta">$0</span><small>Ganancia neta</small></div>
       </div>
 
       <div class="bar-label"><span>Números vendidos</span><span id="lbl-sold"></span></div>
@@ -261,6 +264,57 @@
 
     </section>
 
+    <!-- Entradas de la peña -->
+    <section class="card" data-view="entradas" aria-labelledby="t-entradas">
+      <h2 id="t-entradas">Entradas (pulseras)</h2>
+      <p class="hint">Anotá cuántas entradas va vendiendo cada uno. Solo la cantidad.</p>
+      <div class="stats">
+        <div class="stat"><span id="e-vendidas">0</span><small>Vendidas</small></div>
+        <div class="stat" id="e-quedan-box"><span id="e-quedan">0</span><small>Quedan</small></div>
+        <div class="stat"><span id="e-vendedores">0</span><small>Vendedores</small></div>
+        <div class="stat neto"><span id="e-recaudado">$0</span><small>Recaudado</small></div>
+      </div>
+      <div id="e-bar-box" hidden>
+        <div class="bar-label"><span>Avance</span><span id="e-lbl"></span></div>
+        <div class="progress" aria-hidden="true"><div id="e-bar" class="fill sold"></div></div>
+      </div>
+      <label class="inline">Total de entradas (opcional)
+        <input type="number" id="e-total" min="0" step="1" inputmode="numeric" placeholder="Ej: 100">
+      </label>
+      <label class="inline">Precio de la entrada ($)
+        <input type="number" id="e-price" min="0" step="500" inputmode="numeric" placeholder="5000">
+      </label>
+      <small class="hint">Entrada anticipada: $5.000. Cada carga guarda el precio vigente, así si después lo cambiás no se modifican las ya cargadas.</small>
+
+      <form id="ticket-form" autocomplete="off" class="top-gap">
+        <div class="row-form">
+          <label>Vendedor/a
+            <input type="text" id="e-seller" list="e-sellers" maxlength="60" placeholder="Escribí el nombre" required>
+          </label>
+          <label>Cantidad
+            <input type="number" id="e-qty" min="1" max="1000" step="1" inputmode="numeric" placeholder="Ej: 5" required>
+          </label>
+          <button type="submit" class="primary">Sumar entradas</button>
+        </div>
+        <datalist id="e-sellers"></datalist>
+        <p id="e-msg" class="msg" role="status"></p>
+      </form>
+
+      <h3>Por vendedor</h3>
+      <ul id="e-totals" class="e-totals"></ul>
+
+      <h3>Movimientos</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Fecha</th><th>Vendedor/a</th><th>Cantidad</th><th>Importe</th><th></th></tr>
+          </thead>
+          <tbody id="tickets-body"></tbody>
+        </table>
+      </div>
+      <p id="e-count" class="hint"></p>
+    </section>
+
     <!-- Tareas -->
     <section class="card" data-view="tareas" aria-labelledby="t-tareas">
       <h2 id="t-tareas">Tareas</h2>
@@ -321,6 +375,7 @@
       <div class="btn-row">
         <button type="button" id="btn-csv">Exportar ventas (CSV)</button>
         <button type="button" id="btn-csv-gastos">Exportar gastos (CSV)</button>
+        <button type="button" id="btn-csv-entradas">Exportar entradas (CSV)</button>
         <button type="button" id="btn-backup">Descargar respaldo</button>
         <button type="button" id="btn-restore">Restaurar respaldo</button>
         <input type="file" id="file-restore" accept="application/json" hidden>
@@ -376,6 +431,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=20261106a"></script>
+  <script type="module" src="app.js?v=20261113a"></script>
 </body>
 </html>
