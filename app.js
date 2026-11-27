@@ -937,11 +937,18 @@ function chosenSeller() {
   return id ? { mode: 'student', id } : { mode: 'none', id: null };
 }
 
+// Llena una lista desplegable de vendedores sin perder lo que estaba elegido
+function fillSellerSelect(select, names, extras = []) {
+  const current = select.value;
+  select.textContent = '';
+  select.append(el('option', { value: '' }, 'Elegí quién vendió…'));
+  names.forEach((n) => select.append(el('option', { value: n }, n)));
+  extras.forEach(([value, label]) => select.append(el('option', { value }, label)));
+  select.value = [...select.options].some((o) => o.value === current) ? current : '';
+}
+
 function renderSaleForm() {
-  const list = $('students-list');
-  list.textContent = '';
-  for (const id of sortedStudentIds()) list.append(el('option', { value: state.students[id].name }));
-  list.append(el('option', { value: DIRECT }));
+  fillSellerSelect($('f-student'), sortedStudentIds().map((id) => state.students[id].name), [[DIRECT, DIRECT]]);
   renderChips();
 }
 
@@ -951,7 +958,7 @@ function renderChips() {
   $('chips-wrap').hidden = mode !== 'student';
   $('direct-wrap').hidden = mode !== 'direct';
   $('seller-hint').textContent = mode !== 'none' ? ''
-    : typed ? 'No hay ningún alumno con ese nombre.' : 'Escribí el nombre y elegilo de la lista.';
+    : typed ? 'No hay ningún alumno con ese nombre.' : 'Elegí el alumno de la lista.';
 
   const chips = $('f-chips');
   chips.textContent = '';
@@ -1765,6 +1772,9 @@ $('g-close').addEventListener('click', () => $('expense-detail').close());
 /* ---------- Entradas (pulseras de la peña) ---------- */
 
 const sellerKey = (name) => name.trim().toLowerCase();
+const DELIVERY = { pulsera: '✅ Pulsera entregada', puerta: '🚪 Entra en puerta' };
+const deliveryLabel = (t) => DELIVERY[t.delivery] || '—';
+const OTHER_SELLER = '__otra__';
 
 // Total por vendedor (sin distinguir mayúsculas), del que más vendió al que menos
 function ticketTotals() {
@@ -1796,12 +1806,17 @@ function renderTickets() {
   }
   if (document.activeElement !== $('e-total')) $('e-total').value = total || '';
   if (document.activeElement !== $('e-price')) $('e-price').value = state.ticketsPrice;
+  const byDelivery = (kind) => Object.values(state.tickets).filter((t) => t.delivery === kind).reduce((n, t) => n + (Number(t.qty) || 0), 0);
+  $('e-pulseras').textContent = byDelivery('pulsera');
+  $('e-puerta').textContent = byDelivery('puerta');
 
-  // sugerencias: alumnos y quienes ya vendieron
-  const names = [...new Set([...Object.values(state.students).map((s) => s.name), ...totals.map((r) => r.name)])].sort((a, b) => a.localeCompare(b, 'es'));
-  const list = $('e-sellers');
-  list.textContent = '';
-  names.forEach((n) => list.append(el('option', { value: n })));
+  // lista de vendedores: los mismos alumnos que en las rifas, más quienes ya vendieron entradas
+  const seen = new Set();
+  const names = [...sortedStudentIds().map((id) => state.students[id].name), ...totals.map((r) => r.name)]
+    .filter((n) => { const k = sellerKey(n); if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  fillSellerSelect($('e-seller'), names, [[OTHER_SELLER, '➕ Otra persona (escribir nombre)']]);
+  $('e-seller-other').hidden = $('e-seller').value !== OTHER_SELLER;
 
   // por vendedor, con barra relativa al que más vendió
   const ul = $('e-totals');
@@ -1820,19 +1835,32 @@ function renderTickets() {
   }
   if (!totals.length) ul.append(el('li', { className: 'hint' }, 'Todavía no se vendió ninguna entrada.'));
 
-  // movimientos, del más nuevo al más viejo
+  // entradas vendidas, de la más nueva a la más vieja (con búsqueda y filtro)
   const body = $('tickets-body');
   body.textContent = '';
-  const ids = Object.keys(state.tickets).sort((a, b) => (state.tickets[b].ts || 0) - (state.tickets[a].ts || 0));
+  const query = $('e-search').value.trim().toLowerCase();
+  const filter = $('e-filter').value;
+  const all = Object.keys(state.tickets).sort((a, b) => (state.tickets[b].ts || 0) - (state.tickets[a].ts || 0));
+  const ids = all.filter((id) => {
+    const t = state.tickets[id];
+    if (filter && t.delivery !== filter) return false;
+    return !query || `${t.buyer || ''} ${t.seller || ''}`.toLowerCase().includes(query);
+  });
   for (const id of ids) {
     const t = state.tickets[id];
     const tr = el('tr');
-    [fmtDate(t.ts), t.seller, String(t.qty), money((Number(t.qty) || 0) * ticketPriceOf(t))].forEach((v, i) => {
+    [fmtDate(t.ts), t.seller, t.buyer || '—', String(t.qty), deliveryLabel(t), money((Number(t.qty) || 0) * ticketPriceOf(t))].forEach((v, i) => {
       const td = el('td', {}, v);
-      td.dataset.label = ['Fecha', 'Vendedor/a', 'Cantidad', 'Importe'][i];
+      td.dataset.label = ['Fecha', 'Vendedor/a', 'Comprador/a', 'Cantidad', 'Entrega', 'Importe'][i];
+      if (i === 4 && t.delivery) td.className = 'e-tag ' + t.delivery;
       tr.append(td);
     });
     const tdAct = el('td');
+    if (t.delivery === 'puerta') {
+      const give = el('button', { type: 'button', className: 'primary' }, 'Dar pulsera');
+      give.dataset.id = id; give.dataset.act = 'give';
+      tdAct.append(give, ' ');
+    }
     const edit = el('button', { type: 'button' }, 'Editar');
     edit.dataset.id = id; edit.dataset.act = 'edit';
     const del = el('button', { type: 'button', className: 'danger' }, 'Borrar');
@@ -1841,26 +1869,38 @@ function renderTickets() {
     tr.append(tdAct);
     body.append(tr);
   }
-  $('e-count').textContent = ids.length ? `${ids.length} movimiento${ids.length > 1 ? 's' : ''}` : '';
+  if (!ids.length && all.length) {
+    const tr = el('tr');
+    tr.append(el('td', { colSpan: 7, className: 'hint' }, 'No hay entradas que coincidan.'));
+    body.append(tr);
+  }
+  $('e-count').textContent = all.length ? `Mostrando ${ids.length} de ${all.length} venta${all.length > 1 ? 's' : ''}` : '';
 }
 
 $('ticket-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = $('e-msg');
-  const seller = $('e-seller').value.trim();
+  const seller = ($('e-seller').value === OTHER_SELLER ? $('e-seller-other').value : $('e-seller').value).trim();
+  const buyer = $('e-buyer').value.trim();
   const qty = Math.round(Number($('e-qty').value));
+  const delivery = document.querySelector('input[name="e-delivery"]:checked')?.value;
   if (!seller) return setMsg(msg, 'Falta el nombre de quien vendió.', 'error');
+  if (!buyer) return setMsg(msg, 'Falta el nombre de quien compró.', 'error');
   if (!Number.isFinite(qty) || qty < 1) return setMsg(msg, 'Poné una cantidad de 1 o más.', 'error');
+  if (!delivery) return setMsg(msg, 'Elegí si se le dio la pulsera o entra en puerta.', 'error');
   // si ya existe con otras mayúsculas, se usa el nombre ya cargado
   const known = ticketTotals().find((r) => sellerKey(r.name) === sellerKey(seller));
   try {
-    await setDoc(doc(db, 'tickets', 'e' + Date.now()), { seller: known ? known.name : seller, qty, price: state.ticketsPrice || TICKET_PRICE_DEFAULT, ts: Date.now(), by: auth.currentUser.email });
+    await setDoc(doc(db, 'tickets', 'e' + Date.now()), { seller: known ? known.name : seller, buyer, delivery, qty, price: state.ticketsPrice || TICKET_PRICE_DEFAULT, ts: Date.now(), by: auth.currentUser.email });
   } catch (err) {
     return showError(err);
   }
-  $('e-qty').value = '';
-  setMsg(msg, `Sumadas ${qty} entrada${qty > 1 ? 's' : ''} a ${known ? known.name : seller} (${money(qty * (state.ticketsPrice || TICKET_PRICE_DEFAULT))}).`, 'ok');
-  $('e-qty').focus();
+  $('e-buyer').value = '';
+  $('e-seller-other').value = '';
+  $('e-qty').value = '1';
+  document.querySelectorAll('input[name="e-delivery"]').forEach((r) => { r.checked = false; });
+  setMsg(msg, `Guardada: ${qty} entrada${qty > 1 ? 's' : ''} para ${buyer}, vendida${qty > 1 ? 's' : ''} por ${known ? known.name : seller} (${money(qty * (state.ticketsPrice || TICKET_PRICE_DEFAULT))}) · ${DELIVERY[delivery]}.`, 'ok');
+  $('e-buyer').focus();
 });
 
 $('e-price').addEventListener('change', async () => {
@@ -1872,6 +1912,15 @@ $('e-price').addEventListener('change', async () => {
     showError(err);
   }
 });
+
+$('e-search').addEventListener('input', renderTickets);
+$('e-seller').addEventListener('change', () => {
+  const other = $('e-seller').value === OTHER_SELLER;
+  $('e-seller-other').hidden = !other;
+  $('e-seller-other').required = other;
+  if (other) $('e-seller-other').focus();
+});
+$('e-filter').addEventListener('change', renderTickets);
 
 $('e-total').addEventListener('change', async () => {
   const total = Math.max(0, Math.round(Number($('e-total').value) || 0));
@@ -1889,14 +1938,23 @@ $('tickets-body').addEventListener('click', async (e) => {
   const t = state.tickets[id];
   if (!t) return;
   if (btn.dataset.act === 'del') {
-    if (!confirm(`¿Borrar este movimiento? (${t.seller}: ${t.qty})`)) return;
+    if (!confirm(`¿Borrar esta venta? (${t.buyer ? t.buyer + ', ' : ''}vendida por ${t.seller}: ${t.qty})`)) return;
     return deleteDoc(doc(db, 'tickets', id)).catch(showError);
   }
-  const text = prompt(`Cantidad para ${t.seller}:`, String(t.qty));
+  if (btn.dataset.act === 'give') {
+    if (!confirm(`¿Confirmás que ${t.buyer || 'esta persona'} ya recibió ${t.qty > 1 ? 'las pulseras' : 'la pulsera'}?`)) return;
+    return setDoc(doc(db, 'tickets', id), { delivery: 'pulsera' }, { merge: true }).catch(showError);
+  }
+  const buyer = prompt('Nombre de quien compró:', t.buyer || '');
+  if (buyer === null) return;
+  const text = prompt(`Cantidad de entradas:`, String(t.qty));
   if (text === null) return;
   const qty = Math.round(Number(text));
   if (!Number.isFinite(qty) || qty < 1) return alert('Poné una cantidad de 1 o más.');
-  setDoc(doc(db, 'tickets', id), { qty }, { merge: true }).catch(showError);
+  const giveText = prompt('Entrega: escribí 1 si se le dio la pulsera, o 2 si entra en puerta.', t.delivery === 'puerta' ? '2' : t.delivery === 'pulsera' ? '1' : '');
+  if (giveText === null) return;
+  const delivery = { 1: 'pulsera', 2: 'puerta' }[giveText.trim()] || t.delivery || null;
+  setDoc(doc(db, 'tickets', id), { buyer: buyer.trim(), qty, delivery }, { merge: true }).catch(showError);
 });
 
 /* ---------- Tareas ---------- */
@@ -2141,8 +2199,9 @@ $('btn-csv').addEventListener('click', () => {
 
 $('btn-csv-entradas').addEventListener('click', () => {
   const quote = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = ['Vendedor,Entradas vendidas,Recaudado'];
-  for (const r of ticketTotals()) lines.push([r.name, r.qty, r.amount].map(quote).join(','));
+  const lines = ['Fecha,Vendedor/a,Comprador/a,Cantidad,Entrega,Importe'];
+  const rows = Object.values(state.tickets).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  for (const t of rows) lines.push([fmtDate(t.ts), t.seller, t.buyer || '', t.qty, { pulsera: 'Pulsera entregada', puerta: 'Entra en puerta' }[t.delivery] || '', (Number(t.qty) || 0) * ticketPriceOf(t)].map(quote).join(','));
   download('bono-entradas.csv', '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 });
 

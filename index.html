@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bono Contribución - Viaje Académico 2027</title>
-  <link rel="stylesheet" href="styles.css?v=20261113a">
+  <link rel="stylesheet" href="styles.css?v=20261127a">
 </head>
 <body>
   <header class="hero" data-view="inicio">
@@ -93,10 +93,9 @@
       <h2 id="t-venta">Registrar venta</h2>
       <form id="sale-form" autocomplete="off">
         <label>¿Quién vendió?
-          <input type="text" id="f-student" list="students-list" placeholder="Escribí el nombre del alumno" required>
+          <select id="f-student" required></select>
           <small id="seller-hint" class="hint"></small>
         </label>
-        <datalist id="students-list"></datalist>
 
         <div id="chips-wrap" hidden>
           <label>Filtrar por número
@@ -267,12 +266,14 @@
     <!-- Entradas de la peña -->
     <section class="card" data-view="entradas" aria-labelledby="t-entradas">
       <h2 id="t-entradas">Entradas (pulseras)</h2>
-      <p class="hint">Anotá cuántas entradas va vendiendo cada uno. Solo la cantidad.</p>
+      <p class="hint">Anotá cada venta: quién vendió, a quién y si se le dio la pulsera o entra en puerta.</p>
       <div class="stats">
         <div class="stat"><span id="e-vendidas">0</span><small>Vendidas</small></div>
         <div class="stat" id="e-quedan-box"><span id="e-quedan">0</span><small>Quedan</small></div>
         <div class="stat"><span id="e-vendedores">0</span><small>Vendedores</small></div>
         <div class="stat neto"><span id="e-recaudado">$0</span><small>Recaudado</small></div>
+        <div class="stat"><span id="e-pulseras">0</span><small>Con pulsera</small></div>
+        <div class="stat"><span id="e-puerta">0</span><small>Entran en puerta</small></div>
       </div>
       <div id="e-bar-box" hidden>
         <div class="bar-label"><span>Avance</span><span id="e-lbl"></span></div>
@@ -289,25 +290,45 @@
       <form id="ticket-form" autocomplete="off" class="top-gap">
         <div class="row-form">
           <label>Vendedor/a
-            <input type="text" id="e-seller" list="e-sellers" maxlength="60" placeholder="Escribí el nombre" required>
+            <select id="e-seller" required></select>
+            <input type="text" id="e-seller-other" maxlength="60" placeholder="Nombre de quien vendió" hidden>
+          </label>
+          <label>Comprador/a
+            <input type="text" id="e-buyer" maxlength="80" placeholder="Nombre de quien compró" required>
           </label>
           <label>Cantidad
-            <input type="number" id="e-qty" min="1" max="1000" step="1" inputmode="numeric" placeholder="Ej: 5" required>
+            <input type="number" id="e-qty" min="1" max="1000" step="1" inputmode="numeric" value="1" placeholder="Ej: 1" required>
           </label>
-          <button type="submit" class="primary">Sumar entradas</button>
         </div>
-        <datalist id="e-sellers"></datalist>
+        <fieldset class="e-delivery">
+          <legend>Entrega</legend>
+          <label class="radio"><input type="radio" name="e-delivery" value="pulsera" required> Se le dio la pulsera</label>
+          <label class="radio"><input type="radio" name="e-delivery" value="puerta"> Entra en puerta (retira la pulsera al llegar)</label>
+        </fieldset>
+        <button type="submit" class="primary">Guardar entrada</button>
         <p id="e-msg" class="msg" role="status"></p>
       </form>
 
       <h3>Por vendedor</h3>
       <ul id="e-totals" class="e-totals"></ul>
 
-      <h3>Movimientos</h3>
+      <h3>Entradas vendidas</h3>
+      <div class="row-form">
+        <label>Buscar
+          <input type="search" id="e-search" placeholder="Comprador/a o vendedor/a">
+        </label>
+        <label>Mostrar
+          <select id="e-filter">
+            <option value="">Todas</option>
+            <option value="puerta">Entran en puerta</option>
+            <option value="pulsera">Con pulsera</option>
+          </select>
+        </label>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Fecha</th><th>Vendedor/a</th><th>Cantidad</th><th>Importe</th><th></th></tr>
+            <tr><th>Fecha</th><th>Vendedor/a</th><th>Comprador/a</th><th>Cantidad</th><th>Entrega</th><th>Importe</th><th></th></tr>
           </thead>
           <tbody id="tickets-body"></tbody>
         </table>
@@ -431,6 +452,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=20261113a"></script>
+  <script type="module" src="app.js?v=20261127a"></script>
 </body>
 </html>

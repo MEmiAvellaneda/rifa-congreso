@@ -413,3 +413,11 @@ section[data-view="entradas"] .stats { grid-template-columns: repeat(auto-fit, m
 .e-right { text-align: right; display: grid; justify-items: end; }
 .e-amount { color: var(--muted); font-size: .82rem; }
 @media (max-width: 600px) { section[data-view="entradas"] .stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* Entradas: forma de entrega */
+.e-delivery { border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px 10px; margin: 0 0 12px; display: grid; gap: 6px; }
+.e-delivery legend { font-weight: 600; padding: 0 4px; }
+.e-delivery label.radio { display: flex; align-items: center; gap: 8px; font-weight: normal; margin: 0; }
+.e-delivery input[type=radio] { width: auto; margin: 0; }
+td.e-tag.puerta { color: #b45309; font-weight: 600; }
+td.e-tag.pulsera { color: #16a34a; }
