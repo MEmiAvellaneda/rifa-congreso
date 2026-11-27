@@ -93,10 +93,9 @@
       <h2 id="t-venta">Registrar venta</h2>
       <form id="sale-form" autocomplete="off">
         <label>¿Quién vendió?
-          <input type="text" id="f-student" list="students-list" placeholder="Escribí el nombre del alumno" required>
+          <select id="f-student" required></select>
           <small id="seller-hint" class="hint"></small>
         </label>
-        <datalist id="students-list"></datalist>
 
         <div id="chips-wrap" hidden>
           <label>Filtrar por número
@@ -291,7 +290,8 @@
       <form id="ticket-form" autocomplete="off" class="top-gap">
         <div class="row-form">
           <label>Vendedor/a
-            <input type="text" id="e-seller" list="e-sellers" maxlength="60" placeholder="Escribí el nombre" required>
+            <select id="e-seller" required></select>
+            <input type="text" id="e-seller-other" maxlength="60" placeholder="Nombre de quien vendió" hidden>
           </label>
           <label>Comprador/a
             <input type="text" id="e-buyer" maxlength="80" placeholder="Nombre de quien compró" required>
@@ -306,7 +306,6 @@
           <label class="radio"><input type="radio" name="e-delivery" value="puerta"> Entra en puerta (retira la pulsera al llegar)</label>
         </fieldset>
         <button type="submit" class="primary">Guardar entrada</button>
-        <datalist id="e-sellers"></datalist>
         <p id="e-msg" class="msg" role="status"></p>
       </form>
 

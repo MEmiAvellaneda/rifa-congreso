@@ -937,11 +937,18 @@ function chosenSeller() {
   return id ? { mode: 'student', id } : { mode: 'none', id: null };
 }
 
+// Llena una lista desplegable de vendedores sin perder lo que estaba elegido
+function fillSellerSelect(select, names, extras = []) {
+  const current = select.value;
+  select.textContent = '';
+  select.append(el('option', { value: '' }, 'Elegí quién vendió…'));
+  names.forEach((n) => select.append(el('option', { value: n }, n)));
+  extras.forEach(([value, label]) => select.append(el('option', { value }, label)));
+  select.value = [...select.options].some((o) => o.value === current) ? current : '';
+}
+
 function renderSaleForm() {
-  const list = $('students-list');
-  list.textContent = '';
-  for (const id of sortedStudentIds()) list.append(el('option', { value: state.students[id].name }));
-  list.append(el('option', { value: DIRECT }));
+  fillSellerSelect($('f-student'), sortedStudentIds().map((id) => state.students[id].name), [[DIRECT, DIRECT]]);
   renderChips();
 }
 
@@ -951,7 +958,7 @@ function renderChips() {
   $('chips-wrap').hidden = mode !== 'student';
   $('direct-wrap').hidden = mode !== 'direct';
   $('seller-hint').textContent = mode !== 'none' ? ''
-    : typed ? 'No hay ningún alumno con ese nombre.' : 'Escribí el nombre y elegilo de la lista.';
+    : typed ? 'No hay ningún alumno con ese nombre.' : 'Elegí el alumno de la lista.';
 
   const chips = $('f-chips');
   chips.textContent = '';
@@ -1767,6 +1774,7 @@ $('g-close').addEventListener('click', () => $('expense-detail').close());
 const sellerKey = (name) => name.trim().toLowerCase();
 const DELIVERY = { pulsera: '✅ Pulsera entregada', puerta: '🚪 Entra en puerta' };
 const deliveryLabel = (t) => DELIVERY[t.delivery] || '—';
+const OTHER_SELLER = '__otra__';
 
 // Total por vendedor (sin distinguir mayúsculas), del que más vendió al que menos
 function ticketTotals() {
@@ -1802,11 +1810,13 @@ function renderTickets() {
   $('e-pulseras').textContent = byDelivery('pulsera');
   $('e-puerta').textContent = byDelivery('puerta');
 
-  // sugerencias: alumnos y quienes ya vendieron
-  const names = [...new Set([...Object.values(state.students).map((s) => s.name), ...totals.map((r) => r.name)])].sort((a, b) => a.localeCompare(b, 'es'));
-  const list = $('e-sellers');
-  list.textContent = '';
-  names.forEach((n) => list.append(el('option', { value: n })));
+  // lista de vendedores: los mismos alumnos que en las rifas, más quienes ya vendieron entradas
+  const seen = new Set();
+  const names = [...sortedStudentIds().map((id) => state.students[id].name), ...totals.map((r) => r.name)]
+    .filter((n) => { const k = sellerKey(n); if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  fillSellerSelect($('e-seller'), names, [[OTHER_SELLER, '➕ Otra persona (escribir nombre)']]);
+  $('e-seller-other').hidden = $('e-seller').value !== OTHER_SELLER;
 
   // por vendedor, con barra relativa al que más vendió
   const ul = $('e-totals');
@@ -1870,7 +1880,7 @@ function renderTickets() {
 $('ticket-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = $('e-msg');
-  const seller = $('e-seller').value.trim();
+  const seller = ($('e-seller').value === OTHER_SELLER ? $('e-seller-other').value : $('e-seller').value).trim();
   const buyer = $('e-buyer').value.trim();
   const qty = Math.round(Number($('e-qty').value));
   const delivery = document.querySelector('input[name="e-delivery"]:checked')?.value;
@@ -1886,6 +1896,7 @@ $('ticket-form').addEventListener('submit', async (e) => {
     return showError(err);
   }
   $('e-buyer').value = '';
+  $('e-seller-other').value = '';
   $('e-qty').value = '1';
   document.querySelectorAll('input[name="e-delivery"]').forEach((r) => { r.checked = false; });
   setMsg(msg, `Guardada: ${qty} entrada${qty > 1 ? 's' : ''} para ${buyer}, vendida${qty > 1 ? 's' : ''} por ${known ? known.name : seller} (${money(qty * (state.ticketsPrice || TICKET_PRICE_DEFAULT))}) · ${DELIVERY[delivery]}.`, 'ok');
@@ -1903,6 +1914,12 @@ $('e-price').addEventListener('change', async () => {
 });
 
 $('e-search').addEventListener('input', renderTickets);
+$('e-seller').addEventListener('change', () => {
+  const other = $('e-seller').value === OTHER_SELLER;
+  $('e-seller-other').hidden = !other;
+  $('e-seller-other').required = other;
+  if (other) $('e-seller-other').focus();
+});
 $('e-filter').addEventListener('change', renderTickets);
 
 $('e-total').addEventListener('change', async () => {
